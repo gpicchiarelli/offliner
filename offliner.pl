@@ -102,15 +102,9 @@ sub worker_thread {
 
 # Funzione per ottenere il titolo del sito
 sub get_site_title {
-    my ($url) = @_;
-    my $response = fetch_url($url);
-    return "unknown_title" unless $response && $response->{content};
-
-    my $content = $response->{content};
-    if ($content =~ /<title>(.*?)<\/title>/) {
-        return $1; # Restituisce il titolo del sito
-    }
-    return "unknown_title"; # Restituisce un valore di fallback
+        my ($url) = @_;
+        my $uri = URI->new($url);
+        return $uri->host;
 }
 
 # Funzione per effettuare il download di un URL con retry in caso di errori
