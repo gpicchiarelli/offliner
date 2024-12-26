@@ -17,6 +17,8 @@ use Mozilla::CA;
 use Encode qw(decode encode);
 use HTML::HeadParser;
 
+$0 = "offliner";
+
 # Lista dei moduli necessari
 my @modules = qw(
     HTTP::Tiny
