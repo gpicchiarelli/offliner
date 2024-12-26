@@ -14,6 +14,8 @@ use threads;
 use Thread::Queue;
 use IO::Socket::SSL;  # Necessario per supporto HTTPS
 use Mozilla::CA;
+use Encode qw(decode encode);
+use HTML::HeadParser;
 
 # Lista dei moduli necessari
 my @modules = qw(
@@ -140,6 +142,18 @@ sub fetch_url {
     return undef;  # Ritorna undef se il download fallisce
 }
 
+# Funzione per determinare la codifica
+sub get_encoding {
+    my ($response) = @_;
+    my $content_type = $response->header('Content-Type');
+    if ($content_type && $content_type =~ /charset=([^\s;]+)/) {
+        return $1;
+    }
+    my $parser = HTML::HeadParser->new;
+    $parser->parse($response->content);
+    return $parser->header('Content-Type') =~ /charset=([^\s;]+)/ ? $1 : 'ISO-8859-1';
+}
+
 # Funzione per scaricare e analizzare una pagina
 sub download_page {
     my ($url, $depth) = @_;
@@ -169,7 +183,12 @@ sub download_page {
 
     # Scrivi il contenuto del file solo se è definito
     eval {
-        open my $fh, '>', $full_path or die "Impossibile scrivere $full_path: $!";
+        #open my $fh, '>', $full_path or die "Impossibile scrivere $full_path: $!";
+        #print $fh $content;
+        #close $fh;
+        my $encoding = get_encoding($response);
+        my $content = decode($encoding, $response->content);
+        open my $fh, '>:encoding('.$encoding.')', $full_path or die "Impossibile aprire $full_path: $!";
         print $fh $content;
         close $fh;
     };
