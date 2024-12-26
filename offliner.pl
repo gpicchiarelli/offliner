@@ -120,14 +120,17 @@ sub fetch_url {
     $ua->agent($user_agent);  # Impostazione dell'user-agent
 
     while ($retries < $max_retries) {
+        binmode STDOUT, ':encoding(UTF-8)';
         print "[DEBUG] Tentativo di scaricare $url\n";  # Debug per tracciare i tentativi
 
         $response = $ua->get($url);  # Tentativo di scaricare il contenuto
         if ($response->is_success) {
+            binmode STDOUT, ':encoding(UTF-8)';
             print "[DEBUG] Scaricato con successo: $url\n";  # Debug per tracciare i successi
             return $response;
         } else {
             $retries++;
+            binmode STDOUT, ':encoding(UTF-8)';
             print "[DEBUG] Errore scaricamento $url: " . $response->status_line . " - Tentativo $retries/$max_retries\n";  # Debug per tracciare gli errori
             sleep 2;  # Pausa tra i tentativi
         }
