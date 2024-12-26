@@ -12,6 +12,21 @@ use Getopt::Long;
 use Time::Piece;
 use threads;
 use Thread::Queue;
+use IO::Socket::SSL;  # Necessario per supporto HTTPS
+use Mozilla::CA;
+
+# Lista dei moduli necessari
+my @modules = qw(
+    HTTP::Tiny
+    HTML::LinkExtor
+    URI
+    File::Path
+    File::Basename
+    Getopt::Long
+    LWP::UserAgent
+    IO::Socket::SSL
+    Mozilla::CA
+);
 
 # Funzione per installare i moduli mancanti
 sub install_module {
@@ -27,17 +42,6 @@ sub install_module {
         }
     }
 }
-
-# Lista dei moduli necessari
-my @modules = qw(
-    HTTP::Tiny
-    HTML::LinkExtor
-    URI
-    File::Path
-    File::Basename
-    Getopt::Long
-    LWP::UserAgent
-);
 
 # Installazione automatica dei moduli richiesti
 foreach my $module (@modules) {
@@ -117,7 +121,8 @@ sub fetch_url {
     
     # Inizializzazione corretta di $ua
     my $ua = LWP::UserAgent->new;
-    $ua->timeout(20);  # Impostazione di un timeout per evitare che resti bloccato
+    $ua->ssl_opts(verify_hostname => 1);  # Verifica del nome host (opzionale)
+    $ua->timeout(10);
     $ua->agent($user_agent);  # Impostazione dell'user-agent
 
     while ($retries < $max_retries) {
