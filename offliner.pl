@@ -261,7 +261,7 @@ OffLiner - Scaricatore di siti web offline
 
 =head1 SYNOPSIS
 
-  perl offliner.pl --url https://example.com [--max-depth N] [--max-threads N]
+perl offliner.pl --url https://example.com [--max-depth N] [--max-threads N]
 
 =head1 DESCRIPTION
 
@@ -311,43 +311,43 @@ Nome del file di log per registrare gli errori. Default: 'download_log.txt'.
 
 =head2 install_module
 
-  install_module($module)
+install_module($module)
 
 Funzione per installare i moduli Perl mancanti.
 
 =head2 get_site_title
 
-  get_site_title($url)
+get_site_title($url)
 
 Ottiene il titolo della pagina web data l'URL.
 
 =head2 fetch_url
 
-  fetch_url($url)
+fetch_url($url)
 
 Effettua il download di un URL con retry in caso di errori.
 
 =head2 download_page
 
-  download_page($url, $depth)
+download_page($url, $depth)
 
 Scarica e analizza una pagina web, seguendo i link trovati fino a una certa profondità.
 
 =head2 log_error
 
-  log_error($message)
+log_error($message)
 
 Registra un messaggio di errore nel file di log.
 
 =head2 uri_to_path
 
-  uri_to_path($uri)
+uri_to_path($uri)
 
 Converte un URI in un percorso di file valido.
 
 =head2 sanitize_filename
 
-  sanitize_filename($filename)
+sanitize_filename($filename)
 
 Sanifica il nome della directory rimuovendo i caratteri speciali.
 
