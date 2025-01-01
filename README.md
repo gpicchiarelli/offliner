@@ -1,6 +1,11 @@
 # OffLiner - Scaricatore di siti web offline
 
-![Perl Version](https://img.shields.io/badge/Perl-5.10%2B-blue) ![License](https://img.shields.io/badge/license-BSD-green)
+![Perl Version](https://img.shields.io/badge/Perl-5.10%2B-blue) 
+![License](https://img.shields.io/badge/license-BSD-green) 
+![Version](https://img.shields.io/github/release/username/repository.svg)
+![Downloads](https://img.shields.io/github/downloads/username/repository/total)
+![Language](https://img.shields.io/github/languages/top/username/repository)
+![Commit Activity](https://img.shields.io/github/commit-activity/m/username/repository)
 
 ## Descrizione
 OffLiner e' un'utility in Perl per scaricare siti web e navigarli offline, mantenendo la struttura e i link.
