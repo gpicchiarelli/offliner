@@ -265,7 +265,7 @@ perl offliner.pl --url https://example.com [--max-depth N] [--max-threads N]
 
 =head1 DESCRIPTION
 
-OffLiner è un'utility per scaricare siti web e navigarli offline, mantenendo la struttura e i link.
+OffLiner e' un'utility per scaricare siti web e navigarli offline, mantenendo la struttura e i link.
 
 =head1 OPTIONS
 
@@ -273,7 +273,7 @@ OffLiner è un'utility per scaricare siti web e navigarli offline, mantenendo la
 
 =item B<--url>
 
-URL del sito da scaricare. Questo parametro è obbligatorio.
+URL del sito da scaricare. Questo parametro e' obbligatorio.
 
 =item B<--user-agent>
 
@@ -281,7 +281,7 @@ User-Agent personalizzato da usare durante il download. Default: 'Mozilla/5.0 (c
 
 =item B<--max-depth>
 
-Profondità massima di link da seguire. Default: 50.
+Profondita' massima di link da seguire. Default: 50.
 
 =item B<--max-threads>
 
@@ -295,7 +295,7 @@ Numero massimo di thread per il download parallelo. Default: 10.
 
 =item B<$user_agent>
 
-Definisce l'user-agent per le richieste HTTP. Può essere sovrascritto tramite l'opzione --user-agent.
+Definisce l'user-agent per le richieste HTTP. Puo' essere sovrascritto tramite l'opzione --user-agent.
 
 =item B<$max_retries>
 
@@ -331,7 +331,7 @@ Effettua il download di un URL con retry in caso di errori.
 
 download_page($url, $depth)
 
-Scarica e analizza una pagina web, seguendo i link trovati fino a una certa profondità.
+Scarica e analizza una pagina web, seguendo i link trovati fino a una certa profondita'.
 
 =head2 log_error
 
