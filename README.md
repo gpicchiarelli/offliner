@@ -62,7 +62,7 @@ perldoc offliner.pl
 Tutti gli errori verranno registrati in un file di log `download_log.txt` nella directory di esecuzione.
 
 ## Licenza
-OffLiner è distribuito sotto licenza BSD.
+OffLiner è distribuito sotto licenza BSD [LICENSE].
 
 ## Autori
 OffLiner Team
