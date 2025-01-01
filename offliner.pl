@@ -3,6 +3,7 @@
 use strict;
 use warnings;
 use File::Path qw(make_path);
+use File::Spec;
 use HTTP::Tiny;
 use HTML::LinkExtor;
 use LWP::UserAgent;
@@ -54,7 +55,7 @@ foreach my $module (@modules) {
 
 # Variabili di configurazione
 my $url;
-my $output_dir;
+my $output_dir = "";
 my $user_agent = 'Mozilla/5.0 (compatible; OffLinerBot/1.0)';
 my $max_depth = 50;
 my $max_threads = 10;  # Limita il numero di thread
@@ -69,6 +70,8 @@ GetOptions(
     'user-agent=s'  => \$user_agent,
     'max-depth=i'   => \$max_depth,
     'max-threads=i' => \$max_threads,
+    'output-dir=s' => \$output_dir,
+
 ) or die "Uso: $0 --url URL [--max-depth N] [--max-threads N]\n";
 
 die "Devi specificare un URL con --url\n" unless $url;
@@ -76,10 +79,18 @@ die "Devi specificare un URL con --url\n" unless $url;
 # Ottieni il titolo del sito
 my $title = get_site_title($url);
 my $timestamp = localtime->strftime('%Y-%m-%d_%H-%M-%S');
-$output_dir = sanitize_filename("${title}_${timestamp}");
+$output_dir = File::Spec->catfile($output_dir,sanitize_filename("${title}_${timestamp}"));
+print($output_dir);
 
-# Crea la directory di output
-make_path($output_dir) unless -d $output_dir;
+eval {
+    # Crea la directory di output
+    make_path($output_dir) unless -d $output_dir;
+};
+if ($@) {
+    die "Errore nella creazione della directory: $@\n";
+} else {
+    print "Directory creata con successo: $output_dir\n";
+}
 
 # Hash per tracciare i link visitati
 my %visited;
