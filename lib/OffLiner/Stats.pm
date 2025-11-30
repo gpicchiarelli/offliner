@@ -130,15 +130,18 @@ sub display_stats {
     }
     
     # Progress bar semplice
-    my $progress_bar = generate_progress_bar($success_rate, 30);
+    my $progress_bar = generate_progress_bar($success_rate, 20);
     
     # Numero di righe da stampare (8 righe totali)
     my $num_lines = 8;
     
-    # Se non è la prima visualizzazione, torna indietro di 8 righe e pulisci
+    # Se non è la prima visualizzazione, torna indietro di 8 righe
     unless ($first_display) {
         # Torna indietro di 8 righe
         print "\033[${num_lines}A";
+    } else {
+        # Prima visualizzazione: stampa una riga vuota per separare
+        print "\n";
     }
     $first_display = 0;
     
@@ -152,26 +155,19 @@ sub display_stats {
     $output .= "${CYAN}${BOLD}═══════════════════════════════════════════════════════════════════════${RESET}${clear_line}\n";
     
     # Statistiche principali - formato compatto
-    $output .= sprintf("${GREEN}  [OK]${RESET} Pagine scaricate: ${BOLD}${GREEN}%6d${RESET}  ${RED}[FAIL]${RESET} Fallite: ${BOLD}${RED}%4d${RESET}${clear_line}\n",
-           $stats->{pages_downloaded}, $stats->{pages_failed});
+    $output .= sprintf("${GREEN}[OK]${RESET} %6d  ${RED}[FAIL]${RESET} %4d  ${BLUE}[TOT]${RESET} %6d  ${MAGENTA}[QUEUE]${RESET} %6d${clear_line}\n",
+           $stats->{pages_downloaded}, $stats->{pages_failed}, $stats->{total}, $stats->{queue_size});
     
-    $output .= sprintf("${BLUE}  [TOT]${RESET} Totale processate: ${BOLD}%6d${RESET}  ${MAGENTA}[QUEUE]${RESET} In coda: ${BOLD}%6d${RESET}${clear_line}\n",
-           $stats->{total}, $stats->{queue_size});
-    
-    $output .= sprintf("${YELLOW}  [SPEED]${RESET} Velocita: ${BOLD}%8s${RESET}  ${CYAN}[TIME]${RESET} Tempo: ${BOLD}%10s${RESET}${clear_line}\n",
-           format_rate($stats->{rate}), format_time($stats->{elapsed}));
-    
-    $output .= sprintf("${GREEN}  [THREADS]${RESET} Thread attivi: ${BOLD}%3d${RESET}  ${BLUE}[VISITED]${RESET} Visitati: ${BOLD}%6d${RESET}${clear_line}\n",
-           $stats->{active_threads}, $stats->{visited_count});
+    $output .= sprintf("${YELLOW}[SPEED]${RESET} %8s  ${CYAN}[TIME]${RESET} %10s  ${GREEN}[THREADS]${RESET} %3d  ${BLUE}[VISITED]${RESET} %6d${clear_line}\n",
+           format_rate($stats->{rate}), format_time($stats->{elapsed}), $stats->{active_threads}, $stats->{visited_count});
     
     if ($eta ne 'N/A') {
-        $output .= sprintf("${MAGENTA}  [ETA]${RESET} Tempo stimato: ${BOLD}%10s${RESET}${clear_line}\n", $eta);
+        $output .= sprintf("${MAGENTA}[ETA]${RESET} %10s  ${WHITE}[PROGRESS]${RESET} %s ${BOLD}%5.1f%%${RESET}${clear_line}\n", 
+               $eta, $progress_bar, $success_rate);
     } else {
-        $output .= "  ${MAGENTA}[ETA]${RESET} Tempo stimato: ${BOLD}N/A${RESET}${clear_line}\n";
+        $output .= sprintf("${MAGENTA}[ETA]${RESET} %10s  ${WHITE}[PROGRESS]${RESET} %s ${BOLD}%5.1f%%${RESET}${clear_line}\n", 
+               'N/A', $progress_bar, $success_rate);
     }
-    
-    # Progress bar
-    $output .= sprintf("${WHITE}  [PROGRESS]${RESET} %s ${BOLD}%5.1f%%${RESET}${clear_line}\n", $progress_bar, $success_rate);
     
     # Footer
     $output .= "${CYAN}${BOLD}═══════════════════════════════════════════════════════════════════════${RESET}${clear_line}\n";
