@@ -1,11 +1,17 @@
 CHANGELOG.md
 CONTRIBUTING.md
+CPAN.md
 LICENSE
 MANIFEST
 Makefile.PL
 META.json
 README.md
 offliner.pl
+PERFORMANCE.md
+scripts/build_cpan_dist.pl
+scripts/validate_cpan.pl
+scripts/README.md
+RELEASE.md
 t/00_basic.t
 t/01_syntax.t
 t/02_help.t
@@ -19,6 +25,5 @@ t/09_error_handling.t
 t/10_cleanup_complete.t
 t/test_helper.pl
 t/README.md
-PERFORMANCE.md
 
 

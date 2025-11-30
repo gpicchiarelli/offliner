@@ -1,0 +1,54 @@
+name: Manual CPAN Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip tests'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Perl
+      uses: shogo82148/actions-setup-perl@v1
+      with:
+        perl-version: '5.36'
+
+    - name: Install dependencies
+      run: |
+        cpanm --notest --quiet --installdeps .
+
+    - name: Validate distribution
+      run: |
+        perl scripts/validate_cpan.pl
+
+    - name: Build distribution
+      run: |
+        if [ "${{ inputs.skip_tests }}" == "true" ]; then
+          perl scripts/build_cpan_dist.pl --skip-tests
+        else
+          perl scripts/build_cpan_dist.pl
+        fi
+
+    - name: Upload tarball artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: cpan-distribution
+        path: OffLiner-*.tar.gz
+        retention-days: 7
+
+    - name: Show tarball info
+      run: |
+        TARBALL=$(ls OffLiner-*.tar.gz | head -1)
+        echo "Distribution tarball: $TARBALL"
+        ls -lh "$TARBALL"
+        echo ""
+        echo "To upload manually:"
+        echo "  cpan-upload $TARBALL"
+

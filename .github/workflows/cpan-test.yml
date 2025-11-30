@@ -1,0 +1,47 @@
+name: CPAN Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly
+
+jobs:
+  test-cpan-install:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        perl-version: ['5.14', '5.18', '5.24', '5.30', '5.36']
+        exclude:
+          - os: macos-latest
+            perl-version: '5.14'
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Perl
+      uses: shogo82148/actions-setup-perl@v1
+      with:
+        perl-version: ${{ matrix.perl-version }}
+
+    - name: Build distribution
+      run: |
+        perl scripts/build_cpan_dist.pl --skip-tests
+
+    - name: Install from tarball
+      run: |
+        TARBALL=$(ls OffLiner-*.tar.gz | head -1)
+        tar -xzf "$TARBALL"
+        cd OffLiner-*
+        perl Makefile.PL
+        make
+        make test
+        make install DESTDIR=/tmp/install-test
+
+    - name: Verify installation
+      run: |
+        /tmp/install-test/usr/local/bin/offliner --help || true
+

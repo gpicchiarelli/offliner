@@ -1,0 +1,95 @@
+name: CPAN Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Set up Perl
+      uses: shogo82148/actions-setup-perl@v1
+      with:
+        perl-version: '5.36'
+
+    - name: Install build dependencies
+      run: |
+        cpanm --notest --quiet ExtUtils::MakeMaker Module::Build::Tiny
+
+    - name: Install dependencies
+      run: |
+        cpanm --notest --quiet --installdeps .
+
+    - name: Validate distribution
+      run: |
+        perl scripts/validate_cpan.pl
+
+    - name: Build distribution
+      run: |
+        perl scripts/build_cpan_dist.pl --skip-tests
+
+    - name: Run tests
+      run: |
+        perl Makefile.PL
+        make test
+
+    - name: Check tarball
+      run: |
+        TARBALL=$(ls OffLiner-*.tar.gz | head -1)
+        echo "TARBALL=$TARBALL" >> $GITHUB_ENV
+        tar -tzf "$TARBALL" > /dev/null
+        ls -lh "$TARBALL"
+
+    - name: Upload tarball artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: cpan-distribution
+        path: OffLiner-*.tar.gz
+        retention-days: 30
+
+  upload-to-cpan:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' && github.event.action == 'published'
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Perl
+      uses: shogo82148/actions-setup-perl@v1
+      with:
+        perl-version: '5.36'
+
+    - name: Download tarball artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: cpan-distribution
+        path: .
+
+    - name: Install CPAN::Uploader
+      run: |
+        cpanm --notest --quiet CPAN::Uploader
+
+    - name: Upload to CPAN
+      env:
+        PAUSE_USERNAME: ${{ secrets.CPAN_USERNAME }}
+        PAUSE_PASSWORD: ${{ secrets.CPAN_PASSWORD }}
+      run: |
+        TARBALL=$(ls OffLiner-*.tar.gz | head -1)
+        if [ -z "$PAUSE_USERNAME" ] || [ -z "$PAUSE_PASSWORD" ]; then
+          echo "Warning: CPAN credentials not set. Skipping upload."
+          echo "Tarball ready: $TARBALL"
+          exit 0
+        fi
+        cpan-upload "$TARBALL"
+

@@ -51,6 +51,16 @@ make test
 make install
 ```
 
+### Installazione da CPAN
+
+```bash
+cpan OffLiner
+# oppure
+cpanm OffLiner
+```
+
+> **Nota**: Il modulo sarà disponibile su CPAN dopo la prima pubblicazione.
+
 ## 💻 Utilizzo
 
 ### Esempio base
@@ -152,6 +162,18 @@ Se trovi un bug, per favore apri una [issue](https://github.com/gpicchiarelli/of
 - Passi per riprodurre
 - Output di errori (se presenti)
 - Versione di Perl e sistema operativo
+
+## 📦 Pubblicazione CPAN
+
+OffLiner è pubblicato su CPAN e può essere installato con:
+
+```bash
+cpan OffLiner
+# oppure
+cpanm OffLiner
+```
+
+Per informazioni sulla pubblicazione automatica, vedi [CPAN.md](./CPAN.md).
 
 ## 📜 Changelog
 

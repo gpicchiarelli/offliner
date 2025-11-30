@@ -44,6 +44,15 @@ dist/
 *-installer.pkg
 postinstall
 
+# CPAN distribution
+OffLiner-*.tar.gz
+OffLiner-*/
+blib/
+_eumm/
+Makefile
+Makefile.old
+pm_to_blib
+
 # OS specific
 .DS_Store
 .DS_Store?

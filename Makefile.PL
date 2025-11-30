@@ -54,7 +54,16 @@ WriteMakefile(
             bugtracker => {
                 web => 'https://github.com/gpicchiarelli/offliner/issues',
             },
+            homepage => 'https://github.com/gpicchiarelli/offliner',
         },
+        keywords => [qw(offline download website crawler wget archive)],
+        'x_contributors' => ['Giacomo Picchiarelli'],
+    },
+    dist => {
+        COMPRESS => 'gzip -9f',
+        SUFFIX => 'gz',
+        PREOP => '$(MAKE) -f Makefile.old distdir',
+        POSTOP => 'rm -rf $(DISTVNAME)/.git',
     },
 );
 
