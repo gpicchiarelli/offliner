@@ -1,0 +1,13 @@
+CHANGELOG.md
+CONTRIBUTING.md
+LICENSE
+MANIFEST
+Makefile.PL
+META.json
+README.md
+offliner.pl
+t/00_basic.t
+t/01_syntax.t
+t/02_help.t
+
+

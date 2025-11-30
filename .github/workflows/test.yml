@@ -1,0 +1,47 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        perl-version: ['5.10', '5.14', '5.18', '5.24', '5.30', '5.36']
+        exclude:
+          - os: macos-latest
+            perl-version: '5.10'
+          - os: macos-latest
+            perl-version: '5.14'
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Perl
+      uses: shogo82148/actions-setup-perl@v1
+      with:
+        perl-version: ${{ matrix.perl-version }}
+
+    - name: Install dependencies
+      run: |
+        cpanm --notest --installdeps .
+
+    - name: Run tests
+      run: |
+        perl Makefile.PL
+        make test
+
+    - name: Syntax check
+      run: |
+        perl -c offliner.pl
+
+    - name: Test help
+      run: |
+        perl offliner.pl --help
+
+

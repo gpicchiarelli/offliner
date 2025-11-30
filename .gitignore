@@ -1,3 +1,4 @@
+# Build artifacts
 !Build/
 .last_cover_stats
 /META.yml
@@ -6,6 +7,16 @@
 *.o
 *.pm.tdy
 *.bs
+/blib/
+/_eumm/
+/*.gz
+/Makefile
+/Makefile.old
+/MANIFEST.bak
+/pm_to_blib
+/*.zip
+*.tar.gz
+*.tar.bz2
 
 # Devel::Cover
 cover_db/
@@ -24,12 +35,28 @@ Build.bat
 # Module::Install
 inc/
 
-# ExtUtils::MakeMaker
-/blib/
-/_eumm/
-/*.gz
-/Makefile
-/Makefile.old
-/MANIFEST.bak
-/pm_to_blib
-/*.zip
+# Application specific
+download_log.txt
+*.log
+build/
+dist/
+*.pkg
+*-installer.pkg
+postinstall
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

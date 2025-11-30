@@ -1,0 +1,26 @@
+# Perl::Critic configuration for OffLiner
+
+# Severity level: gentle (least strict)
+severity = gentle
+
+# Allow certain violations
+[TestingAndDebugging::RequireUseStrict]
+allow = 0
+
+[TestingAndDebugging::RequireUseWarnings]
+allow = 0
+
+[CodeLayout::RequireTidyCode]
+allow = 1
+
+# Allow certain practices for script files
+[Variables::RequireLexicalLoopIterators]
+allow = 1
+
+[ControlStructures::ProhibitPostfixControls]
+allow = 1
+
+[Subroutines::ProhibitExplicitReturnUndef]
+allow = 1
+
+

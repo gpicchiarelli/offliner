@@ -2,74 +2,157 @@
 
 ![Perl Version](https://img.shields.io/badge/Perl-5.10%2B-blue) 
 ![License](https://img.shields.io/badge/license-BSD-green) 
-![Version](https://img.shields.io/github/release/gpicchiarelli/offliner.svg)
-![Downloads](https://img.shields.io/github/downloads/gpicchiarelli/offliner/total)
+![Version](https://img.shields.io/github/v/release/gpicchiarelli/offliner)
+![Tests](https://github.com/gpicchiarelli/offliner/workflows/Tests/badge.svg)
 ![Language](https://img.shields.io/github/languages/top/gpicchiarelli/offliner)
-![Commit Activity](https://img.shields.io/github/commit-activity/m/gpicchiarelli/offliner)
 
-## Descrizione
-OffLiner e' un'utility in Perl per scaricare siti web e navigarli offline, mantenendo la struttura e i link.
+OffLiner è un'utility Perl professionale per scaricare siti web e navigarli offline, mantenendo la struttura e i link. Supporta download parallelo multi-thread con sincronizzazione thread-safe, gestione errori avanzata e molto altro.
 
-### Caratteristiche principali:
-- Scaricamento di interi siti web per la consultazione offline
-- Supporto per HTTPS e connessioni SSL
-- Download parallelo con multi-threading
-- Salvataggio e sanificazione automatica dei nomi di file e directory
-- Tentativi multipli in caso di errore di connessione
-- Log degli errori per diagnosi e debugging
+## ✨ Caratteristiche principali
 
-## Requisiti
+- 🚀 **Download parallelo multi-thread** - Scarica più pagine contemporaneamente
+- 🔒 **Thread-safe** - Sincronizzazione sicura con semafori
+- 🔄 **Retry automatico** - Gestione intelligente degli errori con tentativi multipli
+- 🔐 **Supporto HTTPS/SSL** - Download sicuri con verifica certificati
+- 📝 **Rilevamento codifica automatico** - Gestione corretta di charset e encoding
+- 📊 **Statistiche** - Conta pagine scaricate e fallite
+- 🛑 **Terminazione pulita** - Gestione corretta di SIGINT/SIGTERM
+- 📁 **Struttura directory intelligente** - Mantiene la struttura originale del sito
+- 🧹 **Sanificazione nomi file** - Rimuove caratteri problematici automaticamente
+- 📋 **Log dettagliati** - Registra tutti gli errori per debugging
+
+## 📋 Requisiti
+
 - Perl 5.10 o superiore
-- Connessione Internet per il download e l'installazione automatica dei moduli mancanti
+- Moduli Perl (vedi sezione Installazione)
 
-## Moduli richiesti
-I seguenti moduli Perl sono necessari per eseguire OffLiner:
-- HTTP::Tiny
-- HTML::LinkExtor
-- URI
-- File::Path
-- File::Basename
-- Getopt::Long
-- LWP::UserAgent
-- IO::Socket::SSL
-- Mozilla::CA
+## 🚀 Installazione
 
-OffLiner installerà automaticamente i moduli mancanti durante l'esecuzione.
+### Installazione rapida
 
-## Installazione
-Per avviare l'installazione automatica, eseguire il seguente comando:
+```bash
+git clone https://github.com/gpicchiarelli/offliner.git
+cd offliner
+cpanm --installdeps .
+```
+
+Oppure con cpan:
+
+```bash
+cpan --installdeps .
+```
+
+### Installazione come modulo Perl
+
+```bash
+perl Makefile.PL
+make
+make test
+make install
+```
+
+## 💻 Utilizzo
+
+### Esempio base
 
 ```bash
 perl offliner.pl --url https://example.com
 ```
 
-I moduli richiesti verranno installati automaticamente tramite CPAN se non già presenti.
-
-## Utilizzo
-Esempio di utilizzo per scaricare un sito web con una profondità massima di 10 e 5 thread:
+### Esempio avanzato
 
 ```bash
-perl offliner.pl --url https://example.com --max-depth 10 --max-threads 5
+perl offliner.pl \
+  --url https://example.com \
+  --output-dir /tmp/downloads \
+  --max-depth 10 \
+  --max-threads 5 \
+  --verbose
 ```
 
-### Opzioni disponibili:
-- `--url` (Obbligatorio): URL del sito da scaricare.
-- `--user-agent`: Specifica un User-Agent personalizzato. Default: 'Mozilla/5.0 (compatible; OffLinerBot/1.0)'.
-- `--max-depth`: Profondità massima dei link da seguire. Default: 50.
-- `--max-threads`: Numero massimo di thread per il download parallelo. Default: 10.
+### Opzioni disponibili
 
-## Documentazione
-Puoi consultare la documentazione completa eseguendo:
+| Opzione | Descrizione | Default |
+|---------|-------------|---------|
+| `--url URL` | URL del sito da scaricare (obbligatorio) | - |
+| `--output-dir DIR` | Directory di output | Directory corrente |
+| `--user-agent STRING` | User-Agent personalizzato | Mozilla/5.0 (compatible; OffLinerBot/1.0) |
+| `--max-depth N` | Profondità massima dei link | 50 |
+| `--max-threads N` | Numero massimo di thread | 10 |
+| `--verbose, -v` | Output verboso | Disabilitato |
+| `--help, -h` | Mostra messaggio di aiuto | - |
+
+## 📚 Documentazione
+
+Documentazione completa disponibile tramite POD:
 
 ```bash
 perldoc offliner.pl
 ```
 
-## Log e Debugging
-Tutti gli errori verranno registrati in un file di log `download_log.txt` nella directory di esecuzione.
+Oppure consulta la documentazione online nel codice sorgente.
 
-## Licenza
-OffLiner è distribuito sotto licenza BSD. Consulta il file [LICENSE](./LICENSE) per maggiori dettagli.
+## 🧪 Testing
 
-## Autori
-OffLiner Team
+Esegui la suite di test:
+
+```bash
+perl Makefile.PL
+make test
+```
+
+## 📝 Log e Debugging
+
+Tutti gli errori vengono registrati in `download_log.txt` nella directory di output. Usa `--verbose` per output dettagliato durante l'esecuzione.
+
+## 🤝 Contribuire
+
+Contributi sono benvenuti! Leggi [CONTRIBUTING.md](./CONTRIBUTING.md) per le linee guida.
+
+1. Fork del repository
+2. Crea un branch per la tua feature (`git checkout -b feature/AmazingFeature`)
+3. Commit delle modifiche (`git commit -m 'Aggiunge AmazingFeature'`)
+4. Push al branch (`git push origin feature/AmazingFeature`)
+5. Apri una Pull Request
+
+## 📄 Licenza
+
+OffLiner è distribuito sotto licenza BSD 3-Clause. Consulta il file [LICENSE](./LICENSE) per maggiori dettagli.
+
+## 👤 Autore
+
+**Giacomo Picchiarelli**
+
+- GitHub: [@gpicchiarelli](https://github.com/gpicchiarelli)
+
+## 🙏 Ringraziamenti
+
+- Tutti i contributori che hanno aiutato a migliorare OffLiner
+- La comunità Perl per gli ottimi moduli disponibili
+
+## 📊 Statistiche
+
+Al termine del download, OffLiner mostra:
+- Numero di pagine scaricate con successo
+- Numero di pagine fallite
+- Percorso della directory di output
+- Percorso del file di log
+
+## ⚠️ Note importanti
+
+- OffLiner segue solo link dello stesso dominio per evitare download infiniti
+- I file vengono salvati mantenendo la struttura originale del sito
+- I nomi di file vengono sanificati automaticamente per compatibilità cross-platform
+- La terminazione con Ctrl+C viene gestita correttamente, permettendo ai thread di completare
+
+## 🐛 Segnalazione Bug
+
+Se trovi un bug, per favore apri una [issue](https://github.com/gpicchiarelli/offliner/issues) con:
+- Descrizione del problema
+- Passi per riprodurre
+- Output di errori (se presenti)
+- Versione di Perl e sistema operativo
+
+## 📜 Changelog
+
+Vedi [CHANGELOG.md](./CHANGELOG.md) per la lista completa delle modifiche.

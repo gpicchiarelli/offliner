@@ -1,0 +1,28 @@
+name: Perl::Critic
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  perlcritic:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Perl
+      uses: shogo82148/actions-setup-perl@v1
+      with:
+        perl-version: '5.36'
+
+    - name: Install Perl::Critic
+      run: |
+        cpanm --notest Perl::Critic
+
+    - name: Run Perl::Critic
+      run: |
+        perlcritic --gentle --verbose 8 offliner.pl || true
+
+
