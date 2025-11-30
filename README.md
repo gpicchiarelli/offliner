@@ -41,6 +41,9 @@ Ideale per:
 - **Supporto HTTPS/SSL** - Download sicuri con verifica certificati (Mozilla::CA)
 - **Validazione URL** - Controllo precoce degli input per fail-fast
 - **Terminazione pulita** - Gestione corretta di SIGINT/SIGTERM con cleanup dei thread
+- **Gestione errori HTTP** - Rileva e logga correttamente errori HTTP (404, 500, timeout) con dettagli completi
+- **Terminazione intelligente** - Termina automaticamente quando tutti i thread falliscono o non c'è più attività
+- **Prevenzione loop infiniti** - Rileva errori consecutivi e termina preventivamente per evitare attese infinite
 
 ### 📝 Gestione Contenuti
 - **Rilevamento codifica automatico** - Gestione corretta di charset e encoding (UTF-8, ISO-8859-1, ecc.)
@@ -50,10 +53,12 @@ Ideale per:
 - **Seguire solo link dello stesso dominio** - Evita download infiniti e mantiene il focus sul sito target
 
 ### 📊 Monitoraggio e Debugging
-- **Statistiche in tempo reale** - Conta pagine scaricate e fallite
-- **Log dettagliati** - Registra tutti gli errori con timestamp in `download_log.txt`
+- **Statistiche in tempo reale** - Conta pagine scaricate, fallite, velocità di rete, thread attivi, coda, tempo trascorso
+- **Log dettagliati** - Registra tutti gli errori HTTP con status code (404, 500, ecc.) e timestamp in `download_log.txt`
 - **Output verboso** - Modalità `--verbose` per debugging dettagliato
-- **Notifiche macOS** - Notifiche automatiche al completamento (solo macOS)
+- **Notifiche macOS** - Notifiche automatiche al completamento con stato (successo, parziale, errore)
+- **Messaggi di completamento intelligenti** - Mostra [SUCCESS], [WARNING] o [ERROR] in base al risultato
+- **Terminazione intelligente** - Rileva automaticamente quando non c'è più lavoro e termina correttamente
 
 ### 🍎 Integrazione macOS
 - **Installazione automatica** - Script di setup completo
@@ -82,6 +87,9 @@ Ideale per:
 - `HTML::HeadParser` (≥ 3.60)
 - `IO::Socket::SSL` (≥ 2.000)
 - `Mozilla::CA` (≥ 20160104)
+- `JSON::PP` (≥ 2.00)
+- `Time::HiRes` (≥ 1.97)
+- `Digest::SHA` (≥ 5.47) - Solo per i test
 
 ## 🚀 Installazione
 
@@ -262,6 +270,18 @@ prove -l t/
 - `08_utils.t` - Test utility functions
 - `09_error_handling.t` - Test gestione errori
 - `10_cleanup_complete.t` - Test cleanup completo
+- `11_macos_integration.t` - Test integrazione macOS
+- `12_stats.t` - Test statistiche
+- `13_stats_integration.t` - Test integrazione statistiche
+- `14_stats_display.t` - Test visualizzazione statistiche
+- `15_network_speed.t` - Test velocità di rete
+- `16_stats_formatting.t` - Test formattazione statistiche
+- `17_stats_threads.t` - Test statistiche thread
+- `18_pod.t` - Test documentazione POD
+- `19_perlcritic.t` - Test qualità codice
+- `20_kwalitee.t` - Test metriche CPAN
+- `21_webserver_integration.t` - Test integrazione con webserver (con verifica SHA512)
+- `22_http_errors.t` - Test gestione errori HTTP (404, 500, timeout)
 
 ## 📝 Log e Debugging
 
@@ -294,6 +314,12 @@ Al termine del download, OffLiner mostra:
 - ❌ Numero di pagine fallite
 - 📁 Percorso della directory di output
 - 📋 Percorso del file di log
+- 📊 Statistiche complete: velocità di rete, tempo totale, thread utilizzati, pagine visitate
+
+**Messaggi di completamento:**
+- `[SUCCESS]` - Download completato senza errori
+- `[WARNING]` - Download completato con alcuni errori (successo parziale)
+- `[ERROR]` - Download completamente fallito (nessuna pagina scaricata)
 
 ## ⚙️ Configurazione e Best Practices
 
@@ -381,6 +407,9 @@ OffLiner include diverse ottimizzazioni per massimizzare le performance:
 - **Cache directory**: Evita chiamate filesystem ridondanti
 - **Monitoraggio efficiente thread**: Uso di `dequeue_timed()` invece di polling continuo
 - **Thread-safe ottimizzato**: Sincronizzazione minimale per ridurre lock contention
+- **Batching bytes**: Accumula bytes scaricati prima di aggiornare statistiche (riduce lock contention)
+- **Cache statistiche**: Cache intelligente per ridurre accessi a variabili condivise
+- **Terminazione intelligente**: Rileva automaticamente quando non c'è più lavoro senza polling continuo
 
 Per dettagli completi, consulta [PERFORMANCE.md](./PERFORMANCE.md).
 
