@@ -15,6 +15,13 @@ Questa directory contiene la suite completa di test per OffLiner.
 - `08_utils.t` - Test utility: test delle funzioni utility
 - `09_error_handling.t` - Test gestione errori: verifica gestione corretta degli errori
 - `10_cleanup_complete.t` - Test cleanup completo: verifica cleanup completo in vari scenari
+- `11_macos_integration.t` - Test integrazione macOS: verifica funzionalità specifiche macOS
+- `12_stats.t` - Test statistiche: test completo del modulo OffLiner::Stats
+- `13_stats_integration.t` - Test integrazione statistiche: test di integrazione per le statistiche
+- `14_stats_display.t` - Test display statistiche: verifica che il display delle statistiche funzioni correttamente
+- `15_network_speed.t` - Test velocità di rete: test specifici per il tracciamento della velocità di rete
+- `16_stats_formatting.t` - Test formattazione: test completi per le funzioni di formattazione (bytes, tempo, velocità)
+- `17_stats_threads.t` - Test thread statistiche: test per il calcolo dei thread attivi e working
 - `test_helper.pl` - Helper per i test: funzioni comuni e cleanup automatico
 
 ## Eseguire i Test

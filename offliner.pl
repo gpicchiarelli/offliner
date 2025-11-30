@@ -224,11 +224,11 @@ $SIG{INT} = $SIG{TERM} = sub {
 # Inizializza statistiche
 init_stats();
 
-# Variabili per colori (dichiarate una sola volta)
+# Variabili per colori (dichiarate una sola volta) - schema scuro e adattabile
 my $RESET = "\033[0m";
 my $BOLD = "\033[1m";
-my $CYAN = "\033[36m";
-my $GREEN = "\033[32m";
+my $CYAN = "\033[38;5;30m";    # Ciano scuro
+my $GREEN = "\033[38;5;34m";   # Verde scuro
 
 # Messaggio iniziale
 binmode STDOUT, ':utf8'; # Gestisce correttamente i caratteri Unicode
@@ -238,6 +238,7 @@ print "${CYAN}${BOLD}═══════════════════�
 print "${CYAN}[URL]${RESET} $url\n";
 print "${CYAN}[OUTPUT]${RESET} $output_dir\n";
 print "${CYAN}[THREADS]${RESET} $max_threads  ${CYAN}[DEPTH]${RESET} $max_depth\n";
+print "${CYAN}[AGENT]${RESET} $user_agent\n";
 print "${CYAN}${BOLD}═══════════════════════════════════════════════════════════════════════${RESET}\n\n";
 
 # Aggiungi il primo URL alla coda
@@ -274,6 +275,8 @@ while (!$terminate && $empty_wait < 5) {
             $active,
             $visited_count
         );
+        # Aggiungi max_threads alle statistiche per calcolare thread lavoranti
+        $stats->{max_threads} = $max_threads;
         
         display_stats($stats);
         $last_stats_update = $current_time;
@@ -339,6 +342,7 @@ my $final_stats = {
     visited_count => $final_visited,
     rate => $total_elapsed > 0 ? $final_downloaded / $total_elapsed : 0,
     total => $final_downloaded + $final_failed,
+    max_threads => $max_threads,
 };
 
 # Mostra statistiche finali

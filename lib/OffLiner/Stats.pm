@@ -4,10 +4,11 @@ use strict;
 use warnings;
 use 5.014;
 use Time::HiRes qw(time);
+use Thread::Semaphore;
 use Exporter 'import';
 
 our $VERSION = '1.0.0';
-our @EXPORT_OK = qw(init_stats update_stats display_stats format_bytes format_time format_rate get_elapsed_time);
+our @EXPORT_OK = qw(init_stats update_stats display_stats format_bytes format_time format_rate get_elapsed_time add_bytes get_total_bytes);
 
 # Statistiche globali
 my $start_time;
@@ -15,6 +16,7 @@ my $last_update_time;
 my $last_pages_downloaded = 0;
 my $last_pages_failed = 0;
 my $total_bytes_downloaded :shared = 0;
+my $last_bytes_downloaded = 0;
 my $bytes_lock;
 my $first_display = 1;
 
@@ -25,6 +27,7 @@ sub init_stats {
     $last_pages_downloaded = 0;
     $last_pages_failed = 0;
     $total_bytes_downloaded = 0;
+    $last_bytes_downloaded = 0;
     $bytes_lock = Thread::Semaphore->new(1);
     $first_display = 1;
 }
@@ -41,9 +44,21 @@ sub update_stats {
     my $pages_diff = $pages_downloaded - $last_pages_downloaded;
     my $rate = $time_since_last > 0 ? $pages_diff / $time_since_last : 0;
     
+    # Calcola velocità di rete (bytes/secondo) - velocità istantanea basata sull'ultimo intervallo
+    my $total_bytes = get_total_bytes();
+    my $bytes_diff = $total_bytes - $last_bytes_downloaded;
+    # Usa velocità istantanea se disponibile, altrimenti velocità media
+    my $network_speed = 0;
+    if ($time_since_last > 0 && $bytes_diff > 0) {
+        $network_speed = $bytes_diff / $time_since_last;  # Velocità istantanea
+    } elsif ($elapsed > 0 && $total_bytes > 0) {
+        $network_speed = $total_bytes / $elapsed;  # Velocità media di fallback
+    }
+    
     $last_update_time = $current_time;
     $last_pages_downloaded = $pages_downloaded;
     $last_pages_failed = $pages_failed;
+    $last_bytes_downloaded = $total_bytes;
     
     return {
         elapsed => $elapsed,
@@ -54,6 +69,8 @@ sub update_stats {
         visited_count => $visited_count,
         rate => $rate,
         total => $pages_downloaded + $pages_failed,
+        network_speed => $network_speed,
+        total_bytes => $total_bytes,
     };
 }
 
@@ -105,16 +122,17 @@ sub display_stats {
     # Assicura che STDOUT gestisca UTF-8 correttamente
     binmode STDOUT, ':utf8';
     
-    # ANSI color codes
+    # ANSI color codes - schema scuro e adattabile ai temi
     my $RESET = "\033[0m";
     my $BOLD = "\033[1m";
-    my $GREEN = "\033[32m";
-    my $RED = "\033[31m";
-    my $YELLOW = "\033[33m";
-    my $BLUE = "\033[34m";
-    my $CYAN = "\033[36m";
-    my $MAGENTA = "\033[35m";
-    my $WHITE = "\033[37m";
+    # Colori più scuri e neutri che funzionano bene su temi chiari e scuri
+    my $GREEN = "\033[38;5;34m";      # Verde scuro
+    my $RED = "\033[38;5;88m";        # Rosso scuro
+    my $YELLOW = "\033[38;5;136m";    # Giallo/arancione scuro
+    my $BLUE = "\033[38;5;24m";       # Blu scuro
+    my $CYAN = "\033[38;5;30m";       # Ciano scuro
+    my $MAGENTA = "\033[38;5;90m";    # Magenta scuro
+    my $WHITE = "\033[38;5;250m";     # Grigio chiaro (più neutro del bianco)
     
     # Calcola tempo stimato rimanente
     my $eta = 'N/A';
@@ -130,49 +148,47 @@ sub display_stats {
     }
     
     # Progress bar semplice
-    my $progress_bar = generate_progress_bar($success_rate, 20);
+    my $progress_bar = generate_progress_bar($success_rate, 15);
     
-    # Numero di righe da stampare (8 righe totali)
-    my $num_lines = 8;
+    # Calcola thread attivi (lavoranti) = max_threads - thread_in_attesa
+    my $max_threads = $stats->{max_threads} // 0;
+    my $threads_working = $max_threads > 0 ? ($max_threads - $stats->{active_threads}) : 0;
     
-    # Se non è la prima visualizzazione, torna indietro di 8 righe
-    unless ($first_display) {
-        # Torna indietro di 8 righe
-        print "\033[${num_lines}A";
-    } else {
-        # Prima visualizzazione: stampa una riga vuota per separare
+    # Usa una singola riga che si aggiorna con \r (carriage return)
+    # Questo evita problemi con le sequenze ANSI per tornare indietro
+    my $clear_line = "\033[K";  # Pulisci fino alla fine della riga
+    
+    # Alla prima visualizzazione, stampa un newline per separare
+    if ($first_display) {
         print "\n";
-    }
-    $first_display = 0;
-    
-    # Pulisci ogni riga e riscrivi
-    my $clear_line = "\033[K";
-    
-    # Costruisci tutto il blocco in una stringa per evitare problemi di buffering
-    my $output = "";
-    $output .= "${CYAN}${BOLD}═══════════════════════════════════════════════════════════════════════${RESET}${clear_line}\n";
-    $output .= "${CYAN}${BOLD}  OffLiner - Download Statistics${RESET}${clear_line}\n";
-    $output .= "${CYAN}${BOLD}═══════════════════════════════════════════════════════════════════════${RESET}${clear_line}\n";
-    
-    # Statistiche principali - formato compatto
-    $output .= sprintf("${GREEN}[OK]${RESET} %6d  ${RED}[FAIL]${RESET} %4d  ${BLUE}[TOT]${RESET} %6d  ${MAGENTA}[QUEUE]${RESET} %6d${clear_line}\n",
-           $stats->{pages_downloaded}, $stats->{pages_failed}, $stats->{total}, $stats->{queue_size});
-    
-    $output .= sprintf("${YELLOW}[SPEED]${RESET} %8s  ${CYAN}[TIME]${RESET} %10s  ${GREEN}[THREADS]${RESET} %3d  ${BLUE}[VISITED]${RESET} %6d${clear_line}\n",
-           format_rate($stats->{rate}), format_time($stats->{elapsed}), $stats->{active_threads}, $stats->{visited_count});
-    
-    if ($eta ne 'N/A') {
-        $output .= sprintf("${MAGENTA}[ETA]${RESET} %10s  ${WHITE}[PROGRESS]${RESET} %s ${BOLD}%5.1f%%${RESET}${clear_line}\n", 
-               $eta, $progress_bar, $success_rate);
-    } else {
-        $output .= sprintf("${MAGENTA}[ETA]${RESET} %10s  ${WHITE}[PROGRESS]${RESET} %s ${BOLD}%5.1f%%${RESET}${clear_line}\n", 
-               'N/A', $progress_bar, $success_rate);
+        $first_display = 0;
     }
     
-    # Footer
-    $output .= "${CYAN}${BOLD}═══════════════════════════════════════════════════════════════════════${RESET}${clear_line}\n";
+    # Costruisci una singola riga compatta con tutte le statistiche
+    my $output = "\r";  # Torna all'inizio della riga
     
-    # Stampa tutto in una volta
+    # Formatta velocità di rete (assicurati che sia un numero valido)
+    my $network_speed = $stats->{network_speed} || 0;
+    my $network_speed_str = ($network_speed > 0) ? (format_bytes($network_speed) . "/s") : "0 B/s";
+    
+    $output .= sprintf("${CYAN}${BOLD}[OffLiner]${RESET} ${GREEN}OK:${RESET}%5d ${RED}FAIL:${RESET}%4d ${BLUE}TOT:${RESET}%5d ${MAGENTA}Queue:${RESET}%5d ${YELLOW}SPD:${RESET}%6s ${CYAN}T:${RESET}%6s ${GREEN}Threads:${RESET}%2d ${BLUE}V:${RESET}%5d ${YELLOW}NET:${RESET}%8s ${MAGENTA}ETA:${RESET}%6s ${WHITE}[%s]${RESET}%5.1f%%",
+           $stats->{pages_downloaded}, 
+           $stats->{pages_failed}, 
+           $stats->{total}, 
+           $stats->{queue_size},
+           format_rate($stats->{rate}),
+           format_time($stats->{elapsed}),
+           $threads_working,
+           $stats->{visited_count},
+           $network_speed_str,
+           $eta,
+           $progress_bar,
+           $success_rate
+    );
+    
+    $output .= $clear_line;  # Pulisci il resto della riga
+    
+    # Stampa la riga (senza \n, così si sovrascrive)
     print $output;
     
     # Forza il flush per assicurarsi che tutto venga stampato
@@ -188,13 +204,15 @@ sub generate_progress_bar {
     my $filled = int(($percentage / 100) * $width);
     my $empty = $width - $filled;
     
-    my $GREEN = "\033[32m";
-    my $YELLOW = "\033[33m";
-    my $RED = "\033[31m";
+    # Colori scuri per la progress bar
+    my $GREEN = "\033[38;5;34m";
+    my $YELLOW = "\033[38;5;136m";
+    my $RED = "\033[38;5;88m";
     my $RESET = "\033[0m";
-    my $BG_GREEN = "\033[42m";
-    my $BG_YELLOW = "\033[43m";
-    my $BG_RED = "\033[41m";
+    # Background colors più scuri
+    my $BG_GREEN = "\033[48;5;22m";   # Verde molto scuro
+    my $BG_YELLOW = "\033[48;5;94m";  # Giallo/arancione scuro
+    my $BG_RED = "\033[48;5;52m";     # Rosso molto scuro
     
     my $color = $BG_GREEN;
     if ($percentage < 50) {
@@ -211,15 +229,23 @@ sub generate_progress_bar {
 # Aggiungi bytes scaricati (thread-safe)
 sub add_bytes {
     my ($bytes) = @_;
-    return unless $bytes_lock;
+    return unless defined $bytes && $bytes > 0;
+    # Inizializza il lock se non esiste (per sicurezza)
+    unless ($bytes_lock) {
+        $bytes_lock = Thread::Semaphore->new(1);
+    }
     $bytes_lock->down();
     $total_bytes_downloaded += $bytes;
     $bytes_lock->up();
 }
 
-# Ottieni bytes totali
+# Ottieni bytes totali (thread-safe)
 sub get_total_bytes {
-    return $total_bytes_downloaded;
+    return 0 unless $bytes_lock;
+    $bytes_lock->down();
+    my $bytes = $total_bytes_downloaded;
+    $bytes_lock->up();
+    return $bytes;
 }
 
 # Ottieni tempo trascorso dall'inizio

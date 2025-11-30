@@ -14,6 +14,7 @@ my @required_modules = qw(
     File::Basename
     Getopt::Long
     Time::Piece
+    Time::HiRes
     threads
     Thread::Queue
     threads::shared
@@ -26,9 +27,30 @@ my @required_modules = qw(
     FindBin
 );
 
-plan tests => scalar @required_modules;
+# Test moduli OffLiner
+my @offliner_modules = qw(
+    OffLiner::Config
+    OffLiner::Utils
+    OffLiner::Logger
+    OffLiner::Downloader
+    OffLiner::Parser
+    OffLiner::Worker
+    OffLiner::Stats
+    OffLiner::Version
+);
+
+plan tests => scalar(@required_modules) + scalar(@offliner_modules);
 
 foreach my $module (@required_modules) {
+    eval "require $module";
+    ok(!$@, "Modulo $module disponibile") or diag("Errore: $@");
+}
+
+# Test moduli OffLiner
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+foreach my $module (@offliner_modules) {
     eval "require $module";
     ok(!$@, "Modulo $module disponibile") or diag("Errore: $@");
 }

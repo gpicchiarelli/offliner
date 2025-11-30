@@ -11,6 +11,7 @@ use Encode qw(decode encode);
 use OffLiner::Parser qw(get_encoding extract_links);
 use OffLiner::Utils qw(uri_to_path);
 use OffLiner::Logger qw(log_error verbose);
+use OffLiner::Stats qw(add_bytes);
 use Exporter 'import';
 
 our $VERSION = '1.0.0';
@@ -100,6 +101,30 @@ sub download_page {
     # Determina il tipo di contenuto
     my $content_type = $response->header('Content-Type') || '';
     my $is_html = $content_type =~ /text\/html|application\/xhtml/i;
+    
+    # Traccia i bytes scaricati
+    # Prova prima con Content-Length header (più accurato)
+    my $content_length = 0;
+    my $header_length = $response->header('Content-Length');
+    if (defined $header_length && $header_length =~ /^\d+$/) {
+        $content_length = int($header_length);
+    }
+    
+    # Se non disponibile, usa la lunghezza del contenuto
+    if ($content_length == 0) {
+        my $content = $response->content;
+        if (defined $content) {
+            $content_length = length($content);
+        }
+    }
+    
+    # Traccia i bytes scaricati solo se abbiamo un valore valido
+    if ($content_length > 0) {
+        eval {
+            add_bytes($content_length);
+        };
+        # Ignora errori nel tracciamento per non interrompere il download
+    }
     
     # Salvataggio della pagina
     my $path = uri_to_path($url, $is_html);
