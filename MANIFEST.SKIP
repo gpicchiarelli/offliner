@@ -1,0 +1,48 @@
+# Skip files that shouldn't be included in the CPAN distribution
+
+# Build artifacts
+^blib/
+^Makefile$
+^pm_to_blib
+^MYMETA\.(json|yml)$
+^Makefile\.old$
+
+# Development files
+^\.git/
+^\.github/
+^\.vscode/
+^\.idea/
+^\.DS_Store$
+^\.perlcriticrc$
+^\.perltidyrc$
+
+# Test artifacts
+^t/test_output/
+^t/.*\.tmp$
+^t/.*\.bak$
+
+# Distribution files (will be generated)
+^OffLiner-.*\.tar\.gz$
+^dist/
+
+# macOS specific (not needed for CPAN)
+^macos/
+
+# Documentation that's not needed in CPAN
+^CHANGELOG\.md$
+^CONTRIBUTING\.md$
+^CPAN\.md$
+^PERFORMANCE\.md$
+^REFACTORING\.md$
+^RELEASE\.md$
+^macos/.*\.md$
+
+# Scripts (keep only essential ones)
+^scripts/README\.md$
+
+# Temporary files
+^.*\.swp$
+^.*\.swo$
+^.*~
+^\.#.*$
+

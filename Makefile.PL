@@ -46,6 +46,12 @@ WriteMakefile(
         'Time::HiRes'         => 0,
         'IO::Socket::INET'    => 0,
     },
+    # Test opzionali per POD e qualità codice
+    TEST_REQUIRES => {
+        'Test::Pod'           => '1.48',
+        'Test::Pod::Coverage' => '1.08',
+        'Perl::Critic'        => '1.126',
+    },
     META_MERGE => {
         'meta-spec' => { version => 2 },
         resources => {

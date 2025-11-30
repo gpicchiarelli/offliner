@@ -1,0 +1,18 @@
+Revision history for OffLiner
+
+{{$NEXT}}
+
+1.0.0  [DATE]
+    - Initial release
+    - Multi-threaded website downloader
+    - Real-time statistics with network speed tracking
+    - Thread-safe operations
+    - Support for HTML and binary files
+    - Automatic encoding detection
+    - Error handling with automatic retry
+    - Clean termination with signal handling
+    - macOS integration with Quick Actions
+    - Comprehensive test suite (108+ tests)
+    - Full POD documentation
+    - CPAN-ready distribution
+

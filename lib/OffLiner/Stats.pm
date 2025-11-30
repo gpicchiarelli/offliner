@@ -296,7 +296,7 @@ OffLiner::Stats - Sistema di statistiche per OffLiner
 
 =head1 DESCRIPTION
 
-Gestisce le statistiche in tempo reale del download, inclusa velocità, tempo trascorso,
+Gestisce le statistiche in tempo reale del download, inclusa velocita, tempo trascorso,
 tempo stimato rimanente e visualizzazione moderna con colori.
 
 =head1 FUNCTIONS
@@ -325,8 +325,36 @@ Formatta secondi in formato leggibile (h m s).
 
 =item B<format_rate($rate)>
 
-Formatta velocità in pagine/secondo.
+Formatta velocita in pagine/secondo.
+
+=item B<add_bytes($bytes)>
+
+Aggiunge bytes scaricati al contatore totale (thread-safe).
+
+=item B<get_total_bytes()>
+
+Restituisce il totale di bytes scaricati (thread-safe).
+
+=item B<get_elapsed_time()>
+
+Restituisce il tempo trascorso dall'inizio in secondi.
+
+=item B<invalidate_bytes_cache()>
+
+Invalida la cache dei bytes per forzare l'aggiornamento nelle statistiche.
 
 =back
+
+=head1 AUTHOR
+
+Giacomo Picchiarelli
+
+=head1 LICENSE
+
+BSD License
+
+=head1 SEE ALSO
+
+L<OffLiner>, L<OffLiner::Worker>, L<OffLiner::Downloader>
 
 =cut

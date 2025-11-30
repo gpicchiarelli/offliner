@@ -1,0 +1,42 @@
+# Perl::Tidy configuration for OffLiner
+# Follows Perl Best Practices
+
+# Indentation
+-indent-columns=4
+-continuation-indentation=4
+-tabs=0
+
+# Line length
+-max-line-length=100
+
+# Brace style
+-bt=2  # Opening brace on new line for if/elsif/else
+-bt=1  # Opening brace on same line for sub/if/elsif/else
+-pt=2  # Paren tightness
+-sbt=2 # Square bracket tightness
+
+# Spacing
+-bbvt=0  # Break before all vertical tightness
+-bbvt=1  # Don't break before vertical tightness
+-bbvt=2  # Break before vertical tightness
+
+# Comments
+-csc  # Closing side comments
+-cscb=1  # Closing side comment bracket
+
+# Other
+-noll  # No long lines
+-nwrs="sort"  # No warnings for sort
+-se  # Errors to stderr
+-bar  # Break after all operators
+-l=100  # Maximum line length
+-vt=2  # Vertical tightness
+-vtc=1  # Vertical tightness closing
+-cti=0  # Closing token indentation
+-nsfs  # No space for semicolon
+-nolq  # No outdent long quotes
+-wbb="% + - * / x != == >= <= =~ !~ < > | & = **= += *= &= <<= &&= -= /= |= >>= ||= //= .= %= ^= x="  # Want blanks before
+
+# Perl Best Practices
+-pbp  # Use Perl Best Practices preset
+
