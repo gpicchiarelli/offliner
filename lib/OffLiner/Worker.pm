@@ -34,11 +34,24 @@ sub worker_thread {
     # Cache per directory già create (per thread)
     my %dir_cache;
     
+    # Ottimizzazione: batch di bytes per ridurre lock contention
+    my $bytes_batch = 0;
+    my $BATCH_SIZE = 10000;  # Accumula fino a 10KB prima di aggiornare
+    
     while (!$$terminate) {
         # Usa dequeue_timed per evitare busy waiting
         my $job = $queue->dequeue_timed(1);
         if (!defined $job) {
-            # Timeout - thread inattivo
+            # Timeout - thread inattivo (aggiorna batch se necessario)
+            if ($bytes_batch > 0) {
+                eval {
+                    require OffLiner::Stats;
+                    OffLiner::Stats::add_bytes($bytes_batch);
+                };
+                $bytes_batch = 0;
+            }
+            
+            # Aggiorna stato thread una sola volta
             $threads_lock->down();
             $$active_threads--;
             $threads_lock->up();
@@ -54,6 +67,7 @@ sub worker_thread {
         
         last if $job eq $SENTINEL;
         
+        # Thread attivo - aggiorna stato una sola volta
         $threads_lock->down();
         $$active_threads--;
         $threads_lock->up();
@@ -63,12 +77,21 @@ sub worker_thread {
             $url, $depth, $ua, $output_dir, $max_depth, $max_retries,
             $visited, $visited_lock, $queue, $terminate,
             $pages_downloaded, $pages_failed, $pages_lock,
-            \%dir_cache, $verbose
+            \%dir_cache, $verbose, \$bytes_batch, $BATCH_SIZE
         );
         
         $threads_lock->down();
         $$active_threads++;
         $threads_lock->up();
+    }
+    
+    # Flush finale del batch (assicurati che venga sempre eseguito)
+    if ($bytes_batch > 0) {
+        eval {
+            require OffLiner::Stats;
+            OffLiner::Stats::add_bytes($bytes_batch);
+            $bytes_batch = 0;  # Reset dopo flush
+        };
     }
     
     # Thread terminato

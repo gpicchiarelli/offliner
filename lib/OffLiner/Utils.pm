@@ -33,12 +33,19 @@ sub uri_to_path {
     my ($uri, $is_html) = @_;
     
     my $u = URI->new($uri);
+    
+    # Includi hostname nel percorso per evitare collisioni
+    my $host = $u->host || 'unknown';
+    $host =~ s/^www\.//;  # Rimuovi www. se presente
+    $host = sanitize_filename($host);
+    
+    # Estrai il percorso
     my $path = $u->path || '/';
     $path =~ s{^/}{};
     $path =~ s{/$}{/index} if $path;
     $path ||= 'index';
     
-    # Rimuovi caratteri problematici
+    # Rimuovi caratteri problematici (ma preserva la struttura)
     $path =~ s/[^\w\.\-\/]/_/g;
     $path =~ s{/+}{/}g;
     
@@ -47,7 +54,10 @@ sub uri_to_path {
         $path .= $is_html ? '.html' : '';
     }
     
-    return $path;
+    # Combina hostname e percorso
+    my $full_path = File::Spec->catfile($host, $path);
+    
+    return $full_path;
 }
 
 # Valida un URL

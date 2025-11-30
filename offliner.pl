@@ -244,15 +244,21 @@ print "${CYAN}${BOLD}═══════════════════�
 # Aggiungi il primo URL alla coda
 $queue->enqueue([$url, 0]);
 
-# Monitora la coda e termina quando è vuota
-# Usa un meccanismo più efficiente: aspetta che tutti i thread siano inattivi
-# Attendi che la coda sia vuota e tutti i thread completati
+# Ottimizzazione: loop principale più efficiente con meno lock e sleep intelligente
 my $empty_wait = 0;
 my $last_stats_update = 0;
-while (!$terminate && $empty_wait < 5) {
-    # Aggiorna e mostra statistiche ogni 0.5 secondi
+my $STATS_UPDATE_INTERVAL = 0.5;  # Aggiorna stats ogni 0.5s
+my $IDLE_SLEEP = 0.1;  # Sleep quando c'è lavoro (ridotto per essere più reattivi)
+my $EMPTY_SLEEP = 0.3;  # Sleep quando coda vuota (ridotto per terminare più velocemente)
+my $MAX_EMPTY_WAIT = 3;  # Ridotto da 5 a 3 per terminare più velocemente
+
+while (!$terminate && $empty_wait < $MAX_EMPTY_WAIT) {
     my $current_time = time();
-    if ($current_time - $last_stats_update >= 0.5) {
+    my $queue_size = $queue->pending();
+    
+    # Ottimizzazione: aggiorna stats solo quando necessario
+    if ($current_time - $last_stats_update >= $STATS_UPDATE_INTERVAL) {
+        # Raggruppa tutti i lock in sequenza per ridurre overhead
         $threads_lock->down();
         my $active = $active_threads;
         $threads_lock->up();
@@ -266,8 +272,6 @@ while (!$terminate && $empty_wait < 5) {
         my $visited_count = scalar keys %visited;
         $visited_lock->up();
         
-        my $queue_size = $queue->pending();
-        
         my $stats = update_stats(
             $downloaded,
             $failed,
@@ -275,29 +279,30 @@ while (!$terminate && $empty_wait < 5) {
             $active,
             $visited_count
         );
-        # Aggiungi max_threads alle statistiche per calcolare thread lavoranti
         $stats->{max_threads} = $max_threads;
         
         display_stats($stats);
         $last_stats_update = $current_time;
     }
     
-    if ($queue->pending() == 0) {
+    # Ottimizzazione: logica di attesa più efficiente
+    if ($queue_size == 0) {
         $threads_lock->down();
         my $active = $active_threads;
         $threads_lock->up();
         
         if ($active == 0) {
             $empty_wait++;
-            # Aspetta 1 secondo per essere sicuri che non ci siano nuovi job
-            sleep 1;
+            # Aspetta un po' per essere sicuri che non ci siano nuovi job in arrivo
+            sleep $EMPTY_SLEEP;  # Sleep più lungo quando tutto è vuoto
         } else {
-            $empty_wait = 0;
-            sleep 0.1;
+            $empty_wait = 0;  # Reset se ci sono thread attivi
+            sleep $IDLE_SLEEP;  # Sleep breve se ci sono thread attivi
         }
     } else {
-        $empty_wait = 0;
-        sleep 0.1;
+        $empty_wait = 0;  # Reset se c'è lavoro nella coda
+        # Sleep breve quando c'è lavoro da fare per essere più reattivi
+        sleep $IDLE_SLEEP;
     }
 }
 

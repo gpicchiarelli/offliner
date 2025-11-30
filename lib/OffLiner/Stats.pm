@@ -8,7 +8,7 @@ use Thread::Semaphore;
 use Exporter 'import';
 
 our $VERSION = '1.0.0';
-our @EXPORT_OK = qw(init_stats update_stats display_stats format_bytes format_time format_rate get_elapsed_time add_bytes get_total_bytes);
+our @EXPORT_OK = qw(init_stats update_stats display_stats format_bytes format_time format_rate get_elapsed_time add_bytes get_total_bytes invalidate_bytes_cache);
 
 # Statistiche globali
 my $start_time;
@@ -32,6 +32,17 @@ sub init_stats {
     $first_display = 1;
 }
 
+# Ottimizzazione: cache per evitare chiamate ripetute a get_total_bytes
+my $cached_total_bytes = 0;
+my $bytes_cache_time = 0;
+my $BYTES_CACHE_TTL = 0.05;  # Cache per 50ms (ridotto per aggiornamenti più frequenti)
+
+# Funzione per invalidare la cache dei bytes (chiamata quando si aggiungono bytes)
+sub invalidate_bytes_cache {
+    $bytes_cache_time = 0;
+    $cached_total_bytes = 0;
+}
+
 # Aggiorna le statistiche (chiamato periodicamente)
 sub update_stats {
     my ($pages_downloaded, $pages_failed, $queue_size, $active_threads, $visited_count) = @_;
@@ -44,8 +55,17 @@ sub update_stats {
     my $pages_diff = $pages_downloaded - $last_pages_downloaded;
     my $rate = $time_since_last > 0 ? $pages_diff / $time_since_last : 0;
     
-    # Calcola velocità di rete (bytes/secondo) - velocità istantanea basata sull'ultimo intervallo
-    my $total_bytes = get_total_bytes();
+    # Ottimizzazione: cache get_total_bytes per ridurre lock contention
+    # Ma aggiorna sempre se è passato abbastanza tempo o se la cache è vuota
+    my $total_bytes;
+    if ($current_time - $bytes_cache_time < $BYTES_CACHE_TTL && $cached_total_bytes >= 0) {
+        $total_bytes = $cached_total_bytes;
+    } else {
+        $total_bytes = get_total_bytes();
+        $cached_total_bytes = $total_bytes;
+        $bytes_cache_time = $current_time;
+    }
+    
     my $bytes_diff = $total_bytes - $last_bytes_downloaded;
     # Usa velocità istantanea se disponibile, altrimenti velocità media
     my $network_speed = 0;
@@ -55,6 +75,7 @@ sub update_stats {
         $network_speed = $total_bytes / $elapsed;  # Velocità media di fallback
     }
     
+    # Aggiorna tutti i valori di stato
     $last_update_time = $current_time;
     $last_pages_downloaded = $pages_downloaded;
     $last_pages_failed = $pages_failed;
@@ -171,7 +192,7 @@ sub display_stats {
     my $network_speed = $stats->{network_speed} || 0;
     my $network_speed_str = ($network_speed > 0) ? (format_bytes($network_speed) . "/s") : "0 B/s";
     
-    $output .= sprintf("${CYAN}${BOLD}[OffLiner]${RESET} ${GREEN}OK:${RESET}%5d ${RED}FAIL:${RESET}%4d ${BLUE}TOT:${RESET}%5d ${MAGENTA}Queue:${RESET}%5d ${YELLOW}SPD:${RESET}%6s ${CYAN}T:${RESET}%6s ${GREEN}Threads:${RESET}%2d ${BLUE}V:${RESET}%5d ${YELLOW}NET:${RESET}%8s ${MAGENTA}ETA:${RESET}%6s ${WHITE}[%s]${RESET}%5.1f%%",
+    $output .= sprintf("${CYAN}${BOLD}[OffLiner]${RESET} ${GREEN}OK:${RESET}%5d ${RED}FAIL:${RESET}%4d ${BLUE}TOT:${RESET}%5d ${MAGENTA}Queue:${RESET}%5d ${YELLOW}SPD:${RESET}%6s ${CYAN}T:${RESET}%6s ${GREEN}Threads:${RESET}%2d ${BLUE}Visited:${RESET}%5d ${YELLOW}NET:${RESET}%8s ${MAGENTA}ETA:${RESET}%6s ${WHITE}[%s]${RESET}%5.1f%%",
            $stats->{pages_downloaded}, 
            $stats->{pages_failed}, 
            $stats->{total}, 
@@ -237,6 +258,9 @@ sub add_bytes {
     $bytes_lock->down();
     $total_bytes_downloaded += $bytes;
     $bytes_lock->up();
+    
+    # Invalida la cache per forzare l'aggiornamento nelle statistiche
+    invalidate_bytes_cache();
 }
 
 # Ottieni bytes totali (thread-safe)

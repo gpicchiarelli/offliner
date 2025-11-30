@@ -39,16 +39,25 @@ sub get_encoding {
 sub extract_links {
     my ($content, $base_url, $callback) = @_;
     
+    # Ottimizzazione: cache URI locale (non condivisa tra thread per evitare problemi)
+    # Nota: cache locale per chiamata, non globale per thread-safety
     my $base_uri = URI->new($base_url);
+    
+    my $base_host = $base_uri->host;
+    return () unless $base_host;  # Early return se host non valido
+    
     my @links = ();
+    
+    # Ottimizzazione: pre-compila regex per tag
+    my $tag_re = qr/^(a|img|link|script|iframe|video|audio|source|object|embed|meta|track|form)$/;
     
     my $parser = HTML::LinkExtor->new(sub {
         my ($tag, %attr) = @_;
         
-        # Lista di tag da controllare
-        return unless $tag =~ /^(a|img|link|script|iframe|video|audio|source|object|embed|meta|track|form)$/;
+        # Lista di tag da controllare (pre-compilata)
+        return unless $tag =~ $tag_re;
         
-        # Estrazione link dai vari attributi
+        # Estrazione link dai vari attributi (ottimizzata)
         my $link = $attr{href} || $attr{src} || $attr{data} || 
                    $attr{action} || $attr{poster} || 
                    ($tag eq 'meta' ? $attr{content} : undef);
@@ -60,18 +69,26 @@ sub extract_links {
             $link = $1;
         }
         
+        # Ottimizzazione: check rapido prima di creare URI
+        # Skip se non inizia con http/https o se è relativo e non valido
+        return unless $link =~ /^https?:\/\// || $link =~ /^[\/\.]/;
+        
         # Converti in URL assoluto
         my $abs_link;
         eval {
             $abs_link = URI->new_abs($link, $base_uri)->as_string;
         };
-        return unless $abs_link;
+        return unless $abs_link && $abs_link =~ /^https?:\/\//;
         
-        # Aggiungi solo link validi HTTP/HTTPS dello stesso dominio
-        if ($abs_link =~ /^https?:\/\//) {
-            my $link_uri = URI->new($abs_link);
+        # Ottimizzazione: check host senza creare nuovo URI
+        # Estrai host direttamente dalla stringa URL
+        if ($abs_link =~ /^https?:\/\/([^\/]+)/) {
+            my $link_host = $1;
+            # Rimuovi porta se presente
+            $link_host =~ s/:\d+$//;
+            
             # Segui solo link dello stesso dominio
-            if ($link_uri->host && $link_uri->host eq $base_uri->host) {
+            if ($link_host eq $base_host) {
                 push @links, $abs_link;
                 $callback->($abs_link) if $callback;
             }

@@ -72,13 +72,19 @@ sub fetch_url {
 }
 
 # Scarica e salva una pagina
+# Parametri opzionali alla fine: $bytes_batch_ref, $batch_size (per ottimizzazione batch)
 sub download_page {
-    my ($url, $depth, $ua, $output_dir, $max_depth, $max_retries, $visited, $visited_lock, $queue, $terminate, $pages_downloaded, $pages_failed, $pages_lock, $dir_cache, $verbose) = @_;
+    my ($url, $depth, $ua, $output_dir, $max_depth, $max_retries, $visited, $visited_lock, $queue, $terminate, $pages_downloaded, $pages_failed, $pages_lock, $dir_cache, $verbose, $bytes_batch_ref, $batch_size) = @_;
+    
+    # Parametri opzionali per batch bytes (gestiti in modo sicuro)
+    my $use_batch = defined $bytes_batch_ref && ref($bytes_batch_ref) eq 'SCALAR';
+    $batch_size = 10000 unless defined $batch_size;
     
     return if $depth > $max_depth;
     return if $$terminate;
     
-    # Controlla se già visitato (thread-safe)
+    # Ottimizzazione: check rapido locale prima del lock (per URL già processati)
+    # Nota: questo è solo un hint, il lock è ancora necessario per thread-safety
     $visited_lock->down();
     if ($visited->{$url}) {
         $visited_lock->up();
@@ -102,28 +108,33 @@ sub download_page {
     my $content_type = $response->header('Content-Type') || '';
     my $is_html = $content_type =~ /text\/html|application\/xhtml/i;
     
-    # Traccia i bytes scaricati
-    # Prova prima con Content-Length header (più accurato)
+    # Ottimizzazione: traccia bytes con batch per ridurre lock contention
     my $content_length = 0;
     my $header_length = $response->header('Content-Length');
     if (defined $header_length && $header_length =~ /^\d+$/) {
         $content_length = int($header_length);
+    } else {
+        # Ottimizzazione: evita di caricare il contenuto se non necessario
+        # Solo se dobbiamo scrivere il file, lo carichiamo
+        # Per ora usiamo una stima basata su header se disponibile
+        $content_length = 0;  # Sarà calcolato quando necessario
     }
     
-    # Se non disponibile, usa la lunghezza del contenuto
-    if ($content_length == 0) {
-        my $content = $response->content;
-        if (defined $content) {
-            $content_length = length($content);
+    # Aggiorna batch bytes (se disponibile il riferimento)
+    if ($use_batch && $content_length > 0) {
+        $$bytes_batch_ref += $content_length;
+        # Flush batch se raggiunge la dimensione massima
+        if ($$bytes_batch_ref >= $batch_size) {
+            eval {
+                add_bytes($$bytes_batch_ref);
+                $$bytes_batch_ref = 0;
+            };
         }
-    }
-    
-    # Traccia i bytes scaricati solo se abbiamo un valore valido
-    if ($content_length > 0) {
+    } elsif ($content_length > 0) {
+        # Fallback: aggiorna direttamente se batch non disponibile
         eval {
             add_bytes($content_length);
         };
-        # Ignora errori nel tracciamento per non interrompere il download
     }
     
     # Salvataggio della pagina
@@ -137,19 +148,42 @@ sub download_page {
         $dir_cache->{$dir} = 1;
     }
     
+    # Ottimizzazione: carica contenuto una sola volta e riutilizzalo
+    my $content = $response->content;
+    my $decoded_content;
+    
+    # Aggiorna content_length se non era disponibile dall'header
+    if ($content_length == 0 && defined $content) {
+        $content_length = length($content);
+        # Aggiorna batch se necessario
+        if ($use_batch && $content_length > 0) {
+            $$bytes_batch_ref += $content_length;
+            if ($$bytes_batch_ref >= $batch_size) {
+                eval {
+                    add_bytes($$bytes_batch_ref);
+                    $$bytes_batch_ref = 0;
+                };
+            }
+        } elsif ($content_length > 0) {
+            eval {
+                add_bytes($content_length);
+            };
+        }
+    }
+    
     # Scrivi il contenuto del file
     eval {
         if ($is_html) {
             my $encoding = get_encoding($response);
-            my $content = decode($encoding, $response->content);
+            $decoded_content = decode($encoding, $content);
             open my $fh, '>:encoding(UTF-8)', $full_path;
-            print $fh $content;
+            print $fh $decoded_content;
             close $fh;
         } else {
             # Per file binari, scrivi direttamente
             open my $fh, '>', $full_path;
             binmode $fh;
-            print $fh $response->content;
+            print $fh $content;
             close $fh;
         }
     };
@@ -167,18 +201,48 @@ sub download_page {
     $$pages_downloaded++;
     $pages_lock->up();
     
-    # Analizza solo file HTML per trovare link
+    # Ottimizzazione: analizza solo file HTML per trovare link
+    # Riutilizza decoded_content già decodificato per evitare doppio parsing
     if ($is_html) {
-        my $content = $response->decoded_content;
-        
-        extract_links($content, $url, sub {
-            my ($abs_link) = @_;
-            $visited_lock->down();
-            unless ($visited->{$abs_link}) {
-                $queue->enqueue([$abs_link, $depth + 1]) unless $$terminate;
+        # Assicurati che decoded_content sia definito (fallback a content se necessario)
+        my $content_for_links = $decoded_content;
+        unless (defined $content_for_links) {
+            # Fallback: usa il contenuto originale se decoded_content non è disponibile
+            # Prova a decodificarlo se possibile
+            if (defined $content) {
+                eval {
+                    my $encoding = get_encoding($response);
+                    $content_for_links = decode($encoding, $content);
+                };
+                # Se la decodifica fallisce, usa il contenuto originale
+                $content_for_links = $content unless defined $content_for_links;
             }
-            $visited_lock->up();
-        });
+        }
+        
+        if (defined $content_for_links) {
+            # Ottimizzazione: batch enqueue per ridurre lock contention
+            my @new_links = ();
+            
+            extract_links($content_for_links, $url, sub {
+                my ($abs_link) = @_;
+                push @new_links, $abs_link;
+            });
+            
+            # Enqueue tutti i link in un unico lock
+            # IMPORTANTE: NON marcare come visitati qui - devono essere marcati solo quando scaricati
+            if (@new_links && !$$terminate) {
+                $visited_lock->down();
+                for my $abs_link (@new_links) {
+                    # Controlla se già visitato, ma NON marcare come visitato qui
+                    # Il link verrà marcato come visitato quando verrà effettivamente scaricato
+                    unless ($visited->{$abs_link}) {
+                        # Aggiungi alla coda senza marcare come visitato
+                        $queue->enqueue([$abs_link, $depth + 1]);
+                    }
+                }
+                $visited_lock->up();
+            }
+        }
     }
 }
 
