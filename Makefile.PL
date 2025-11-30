@@ -26,6 +26,7 @@ WriteMakefile(
         'HTML::HeadParser'    => '3.60',
         'IO::Socket::SSL'     => '2.000',
         'Mozilla::CA'         => '20160104',
+        'JSON::PP'            => '2.00',
         'FindBin'             => 0,
     },
     EXE_FILES           => ['offliner.pl'],

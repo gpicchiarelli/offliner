@@ -17,9 +17,11 @@ _offliner() {
                 '--url[URL del sito da scaricare (obbligatorio)]:URL:_urls' \
                 '--output-dir[Directory di output]:directory:_files -/' \
                 '--user-agent[User-Agent personalizzato]:user-agent:' \
-                '--max-depth[Profondità massima dei link]:depth:' \
-                '--max-threads[Numero massimo di thread]:threads:' \
-                '--max-retries[Numero massimo di tentativi]:retries:' \
+                '--max-depth[Profondità massima dei link]:depth:((1 2 3 5 10 20 50))' \
+                '--max-threads[Numero massimo di thread]:threads:((1 2 5 10 20 50))' \
+                '--max-retries[Numero massimo di tentativi]:retries:((1 2 3 5))' \
+                '(-c --clipboard)'{-c,--clipboard}'[Usa URL dalla clipboard (macOS)]' \
+                '--check-update[Verifica aggiornamenti disponibili]' \
                 '(-v --verbose)'{-v,--verbose}'[Output verboso]' \
                 '(-h --help)'{-h,--help}'[Mostra messaggio di aiuto]'
             ;;
@@ -31,6 +33,15 @@ _offliner() {
                 --output-dir)
                     _files -/
                     ;;
+                --max-depth)
+                    _values 'Profondità' 1 2 3 5 10 20 50
+                    ;;
+                --max-threads)
+                    _values 'Thread' 1 2 5 10 20 50
+                    ;;
+                --max-retries)
+                    _values 'Tentativi' 1 2 3 5
+                    ;;
                 *)
                     _files
                     ;;
@@ -40,4 +51,3 @@ _offliner() {
 }
 
 _offliner "$@"
-

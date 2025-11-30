@@ -55,33 +55,57 @@
 				<key>ActionParameters</key>
 				<dict>
 					<key>COMMAND_STRING</key>
-					<string># OffLiner - Quick Action per Finder
+					<string>#!/bin/zsh
+# OffLiner - Quick Action per Finder
 # Scarica il sito web selezionato
 
-# Estrai URL dal testo selezionato
-URL=$(echo "$1" | grep -oE 'https?://[^[:space:]]+' | head -1)
+# Funzione per estrarre URL da testo multi-riga
+extract_urls() {
+    local text="$1"
+    # Cerca tutti gli URL nel testo
+    echo "$text" | grep -oE 'https?://[^[:space:]]+' | head -1
+}
 
+# Ottieni il testo selezionato
+SELECTED_TEXT="$1"
+
+# Estrai URL dal testo selezionato
+URL=$(extract_urls "$SELECTED_TEXT")
+
+# Se non trovato, prova il testo completo
 if [ -z "$URL" ]; then
-    # Se non c'è un URL, usa il testo come URL
-    URL="$1"
+    # Rimuovi caratteri di controllo e newline
+    URL=$(echo "$SELECTED_TEXT" | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 fi
 
 # Verifica che sia un URL valido
 if [[ ! "$URL" =~ ^https?:// ]]; then
-    osascript -e 'display dialog "URL non valido: '"$URL"'" buttons {"OK"} default button "OK" with icon stop'
+    osascript -e "display dialog \"URL non valido o non trovato nel testo selezionato.\n\nTesto: ${SELECTED_TEXT:0:100}...\" buttons {\"OK\"} default button \"OK\" with icon stop"
     exit 1
 fi
 
-# Esegui OffLiner
-if command -v offliner &gt; /dev/null 2&gt;&amp;1; then
-    # Apri Terminal e esegui offliner in background
-    osascript -e 'tell application "Terminal" to do script "offliner --url '"$URL"' --output-dir \"$HOME/Downloads/OffLiner\" --verbose; osascript -e '\''display notification \"Download completato per '"$URL"'\" with title \"OffLiner\"'\''"'
-    
-    # Notifica immediata
-    osascript -e 'display notification "Download avviato per '"$URL"'" with title "OffLiner"'
-else
-    osascript -e 'display dialog "OffLiner non trovato. Installalo con: ./macos/install.sh" buttons {"OK"} default button "OK" with icon stop'
-fi</string>
+# Verifica che offliner sia installato
+if ! command -v offliner > /dev/null 2>&1; then
+    osascript -e 'display dialog "OffLiner non trovato nel PATH.\n\nInstalla con:\n./macos/install.sh" buttons {"OK"} default button "OK" with icon stop'
+    exit 1
+fi
+
+# Directory di output dalla config o default
+OUTPUT_DIR="${HOME}/Downloads/OffLiner"
+if [ -f "${HOME}/.config/offliner/config.json" ]; then
+    CONFIG_OUTPUT=$(grep -o '"default_output_dir"[^,]*' "${HOME}/.config/offliner/config.json" | cut -d'"' -f4)
+    [ -n "$CONFIG_OUTPUT" ] && OUTPUT_DIR="$CONFIG_OUTPUT"
+fi
+
+# Esegui offliner in background
+osascript -e "display notification \"Download avviato per ${URL}\" with title \"OffLiner\"" 2>/dev/null || true
+
+# Esegui in background senza aprire Terminal
+nohup offliner --url "$URL" --output-dir "$OUTPUT_DIR" --verbose > /tmp/offliner_$$.log 2>&1 &
+
+# Notifica di avvio
+PID=$!
+osascript -e "display notification \"Download avviato (PID: $PID)\" with title \"OffLiner\" subtitle \"$URL\"" 2>/dev/null || true</string>
 					<key>CheckedForUserDefaultShell</key>
 					<true/>
 					<key>Shell</key>
@@ -195,4 +219,3 @@ fi</string>
 	</dict>
 </dict>
 </plist>
-

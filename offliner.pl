@@ -33,6 +33,7 @@ use HTML::LinkExtor;
 use HTML::HeadParser;
 use IO::Socket::SSL;
 use Mozilla::CA;
+use JSON::PP qw(decode_json encode_json);
 
 our $VERSION = '1.0.0';
 
@@ -65,6 +66,7 @@ my @required_modules = qw(
     HTML::HeadParser
     IO::Socket::SSL
     Mozilla::CA
+    JSON::PP
 );
 
 # Verifica e installa moduli mancanti
@@ -88,15 +90,21 @@ sub check_and_install_modules {
 
 check_and_install_modules();
 
+# Carica configurazione persistente (macOS)
+my $config_file = $ENV{HOME} . '/.config/offliner/config.json';
+my %config = load_config();
+
 # Variabili di configurazione
 my $url;
 my $output_dir = "";
 my $user_agent = DEFAULT_USER_AGENT;
-my $max_depth = DEFAULT_MAX_DEPTH;
-my $max_threads = DEFAULT_MAX_THREADS;
-my $max_retries = DEFAULT_MAX_RETRIES;
+my $max_depth = $config{default_max_depth} // DEFAULT_MAX_DEPTH;
+my $max_threads = $config{default_max_threads} // DEFAULT_MAX_THREADS;
+my $max_retries = $config{default_max_retries} // DEFAULT_MAX_RETRIES;
 my $verbose = 0;
 my $help = 0;
+my $clipboard = 0;
+my $check_update = 0;
 
 # Parsing degli argomenti da riga di comando
 GetOptions(
@@ -108,10 +116,28 @@ GetOptions(
     'output-dir=s'  => \$output_dir,
     'verbose|v'     => \$verbose,
     'help|h'        => \$help,
+    'clipboard|c'   => \$clipboard,
+    'check-update'   => \$check_update,
 ) or usage();
 
 usage() if $help;
-die "Devi specificare un URL con --url\n" unless $url;
+
+# Verifica aggiornamenti se richiesto
+if ($check_update) {
+    check_for_updates();
+    exit 0;
+}
+
+# Supporto clipboard (macOS)
+if ($clipboard && $^O eq 'darwin') {
+    $url = get_clipboard_url();
+    unless ($url) {
+        die "Nessun URL trovato nella clipboard\n";
+    }
+    print "[+] URL dalla clipboard: $url\n" if $verbose;
+}
+
+die "Devi specificare un URL con --url o usare --clipboard\n" unless $url;
 
 # Valida parametri
 if ($max_depth < 0) {
@@ -128,6 +154,11 @@ if ($max_retries < 1) {
 my $uri = URI->new($url);
 unless ($uri->scheme && ($uri->scheme eq 'http' || $uri->scheme eq 'https')) {
     die "URL non valido. Deve essere http:// o https://\n";
+}
+
+# Usa directory di output dalla config se non specificata
+if (!$output_dir && $config{default_output_dir}) {
+    $output_dir = $config{default_output_dir};
 }
 
 # Ottieni il titolo del sito
@@ -225,11 +256,36 @@ print "[+] Log degli errori: $log_file\n";
 
 # Notifica macOS se disponibile
 if ($^O eq 'darwin' && !$terminate) {
-    send_macos_notification(
-        "Download completato",
-        "Pagine scaricate: $pages_downloaded\nPagine fallite: $pages_failed",
-        $output_dir
-    );
+    my $notify = $config{notifications_enabled} // 1;
+    my $open_finder = $config{open_finder_on_complete} // 1;
+    
+    if ($notify) {
+        if ($pages_failed > 0 && $pages_downloaded == 0) {
+            # Tutto fallito
+            send_macos_notification(
+                "Download fallito",
+                "Impossibile scaricare il sito.\nPagine fallite: $pages_failed",
+                undef,
+                0
+            );
+        } elsif ($pages_failed > 0) {
+            # Parziale
+            send_macos_notification(
+                "Download completato con errori",
+                "Pagine scaricate: $pages_downloaded\nPagine fallite: $pages_failed",
+                $open_finder ? $output_dir : undef,
+                0
+            );
+        } else {
+            # Successo
+            send_macos_notification(
+                "Download completato",
+                "Pagine scaricate: $pages_downloaded\nPagine fallite: $pages_failed",
+                $open_finder ? $output_dir : undef,
+                1
+            );
+        }
+    }
 }
 
 sub usage {
@@ -237,12 +293,14 @@ sub usage {
 Uso: $0 --url URL [opzioni]
 
 Opzioni:
-  --url URL              URL del sito da scaricare (obbligatorio)
-  --output-dir DIR       Directory di output (default: directory corrente)
+  --url URL              URL del sito da scaricare (obbligatorio, tranne con --clipboard)
+  --output-dir DIR       Directory di output (default: dalla configurazione o directory corrente)
   --user-agent STRING    User-Agent personalizzato
-  --max-depth N          Profondità massima dei link (default: 50)
-  --max-threads N        Numero massimo di thread (default: 10)
-  --max-retries N        Numero massimo di tentativi per URL (default: 3)
+  --max-depth N          Profondità massima dei link (default: dalla configurazione o 50)
+  --max-threads N        Numero massimo di thread (default: dalla configurazione o 10)
+  --max-retries N        Numero massimo di tentativi per URL (default: dalla configurazione o 3)
+  --clipboard, -c         Usa URL dalla clipboard (macOS)
+  --check-update          Verifica se ci sono aggiornamenti disponibili
   --verbose, -v          Output verboso
   --help, -h             Mostra questo messaggio
 
@@ -552,30 +610,128 @@ sub sanitize_filename {
 
 # Funzione per inviare notifiche macOS
 sub send_macos_notification {
-    my ($title, $message, $output_path) = @_;
+    my ($title, $message, $output_path, $success) = @_;
+    $success = 1 unless defined $success;
     
     return unless $^O eq 'darwin';
+    return unless -x '/usr/bin/osascript';
     
-    # Escape caratteri speciali per AppleScript
+    # Escape caratteri speciali per AppleScript (metodo robusto)
+    $title =~ s/\\/\\\\/g;
     $title =~ s/"/\\"/g;
+    $title =~ s/\$/\\\$/g;
+    $title =~ s/`/\\`/g;
+    
+    $message =~ s/\\/\\\\/g;
     $message =~ s/"/\\"/g;
-    $output_path =~ s/"/\\"/g;
+    $message =~ s/\$/\\\$/g;
+    $message =~ s/`/\\`/g;
     $message =~ s/\n/\\n/g;
     
-    my $script = qq{
-        display notification "$message" with title "$title" subtitle "OffLiner" sound name "Glass"
-    };
+    my $sound = $success ? 'Glass' : 'Basso';
+    
+    # Usa AppleScript con escape corretto
+    my $script = qq{display notification "$message" with title "$title" subtitle "OffLiner" sound name "$sound"};
     
     eval {
-        system('osascript', '-e', $script) == 0;
+        open my $pipe, '|-', 'osascript', '-e', $script or return;
+        close $pipe;
     };
     
     # Apri Finder nella directory di output (opzionale)
-    if ($output_path && -d $output_path) {
+    if ($output_path && -d $output_path && -x '/usr/bin/open') {
         eval {
             system('open', $output_path) == 0;
         };
     }
+}
+
+# Funzione per caricare configurazione
+sub load_config {
+    my %config = ();
+    
+    if (-f $config_file && -r $config_file) {
+        eval {
+            open my $fh, '<', $config_file or die "Cannot read config: $!";
+            local $/;
+            my $json = <$fh>;
+            close $fh;
+            my $data = decode_json($json);
+            %config = %$data;
+        };
+        if ($@ && $verbose) {
+            warn "[!] Errore lettura config: $@\n";
+        }
+    }
+    
+    return %config;
+}
+
+# Funzione per ottenere URL dalla clipboard (macOS)
+sub get_clipboard_url {
+    return undef unless $^O eq 'darwin';
+    return undef unless -x '/usr/bin/pbpaste';
+    
+    my $clipboard = `pbpaste 2>/dev/null`;
+    chomp $clipboard;
+    
+    # Cerca URL nel testo
+    if ($clipboard =~ /(https?:\/\/[^\s]+)/) {
+        return $1;
+    }
+    
+    # Se è già un URL valido
+    if ($clipboard =~ /^https?:\/\//) {
+        return $clipboard;
+    }
+    
+    return undef;
+}
+
+# Funzione per verificare aggiornamenti
+sub check_for_updates {
+    my $current_version = $VERSION;
+    
+    eval {
+        require LWP::UserAgent;
+        my $ua = LWP::UserAgent->new(timeout => 5);
+        $ua->agent("OffLiner/$VERSION");
+        
+        my $response = $ua->get('https://api.github.com/repos/gpicchiarelli/offliner/releases/latest');
+        
+        if ($response->is_success) {
+            my $content = $response->decoded_content;
+            if ($content =~ /"tag_name"\s*:\s*"v?([\d.]+)"/) {
+                my $latest_version = $1;
+                if (version_compare($latest_version, $current_version) > 0) {
+                    print "📦 Nuova versione disponibile: $latest_version (attuale: $current_version)\n";
+                    print "Scarica da: https://github.com/gpicchiarelli/offliner/releases/latest\n";
+                } else {
+                    print "✓ Sei aggiornato alla versione $current_version\n";
+                }
+            }
+        }
+    };
+    
+    if ($@) {
+        warn "Impossibile verificare aggiornamenti: $@\n" if $verbose;
+    }
+}
+
+# Funzione per confrontare versioni
+sub version_compare {
+    my ($v1, $v2) = @_;
+    my @v1_parts = split /\./, $v1;
+    my @v2_parts = split /\./, $v2;
+    
+    for my $i (0..$#v1_parts) {
+        my $p1 = $v1_parts[$i] || 0;
+        my $p2 = $v2_parts[$i] || 0;
+        return 1 if $p1 > $p2;
+        return -1 if $p1 < $p2;
+    }
+    
+    return 0;
 }
 
 __END__
