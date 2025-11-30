@@ -24,6 +24,38 @@ Questo repository include i seguenti workflow GitHub Actions:
 
 **Status**: ✅ **Raccomandato** - Il workflow più completo per verificare che tutto funzioni con i thread
 
+### 1b. `stats-tests.yml` - Test Statistiche con Thread ⚡ **VELOCE**
+**Quando si attiva**: Modifiche ai file delle statistiche, o manualmente
+
+**Cosa fa**:
+- ✅ Test rapidi solo per i moduli statistiche
+- ✅ Verifica thread-safety di `add_bytes` con thread concorrenti
+- ✅ Test di tutti i 108 test delle statistiche
+- ✅ Test su versioni Perl più recenti (5.24, 5.30, 5.36)
+- ✅ Più veloce del comprehensive-tests (solo test statistiche)
+
+**Status**: ✅ **Utile** - Workflow veloce per testare solo le statistiche quando modificate
+
+### 2. `test.yml` - Test Automatici
+**Quando si attiva**: Push e Pull Request su main/master/develop, o manualmente
+
+**Cosa fa**:
+- ✅ Verifica completa del supporto ai thread in Perl
+- ✅ Test espliciti della funzionalità dei thread (Thread::Queue, Thread::Semaphore, shared variables)
+- ✅ Test completi di tutte le suite:
+  - Test base (syntax, help, options, modules)
+  - Test statistiche (12_stats.t, 13_stats_integration.t, 14_stats_display.t, 15_network_speed.t, 16_stats_formatting.t, 17_stats_threads.t)
+  - Test utility e error handling
+  - Test funzionali e integrazione
+  - Test cleanup
+- ✅ Test di integrazione thread con OffLiner
+- ✅ Test di performance con thread (solo su main/master o manuale)
+- ✅ Test su multiple versioni di Perl (5.14, 5.18, 5.24, 5.30, 5.36)
+- ✅ Test su Ubuntu e macOS
+- ✅ Cache delle dipendenze CPAN per velocità
+
+**Status**: ✅ **Raccomandato** - Il workflow più completo per verificare che tutto funzioni con i thread
+
 ### 2. `test.yml` - Test Automatici
 **Quando si attiva**: Push e Pull Request su main/master
 
