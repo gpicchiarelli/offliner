@@ -31,6 +31,17 @@ WriteMakefile(
     EXE_FILES           => ['offliner.pl'],
     test => {
         TESTS => 't/*.t',
+        RECURSIVE_TEST_FILES => 1,
+    },
+    TEST_REQUIRES => {
+        'Test::More'          => '0.88',
+        'File::Temp'          => '0.22',
+        'File::Spec'          => '3.40',
+        'FindBin'             => 0,
+        'Cwd'                 => 0,
+        'File::Find'          => 0,
+        'Time::HiRes'         => 0,
+        'IO::Socket::INET'    => 0,
     },
     META_MERGE => {
         'meta-spec' => { version => 2 },

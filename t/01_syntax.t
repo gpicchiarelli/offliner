@@ -18,5 +18,3 @@ is($exit_code, 0, "Sintassi Perl valida")
     or diag("Output: $output");
 
 done_testing();
-
-

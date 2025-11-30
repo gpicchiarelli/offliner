@@ -27,6 +27,14 @@ jobs:
       with:
         perl-version: ${{ matrix.perl-version }}
 
+    - name: Cache CPAN modules
+      uses: actions/cache@v3
+      with:
+        path: ~/.cpanm
+        key: ${{ runner.os }}-cpanm-${{ matrix.perl-version }}-${{ hashFiles('Makefile.PL') }}
+        restore-keys: |
+          ${{ runner.os }}-cpanm-${{ matrix.perl-version }}-
+
     - name: Install dependencies
       run: |
         cpanm --notest --installdeps .

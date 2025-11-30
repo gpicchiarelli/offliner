@@ -20,5 +20,3 @@ like($output, qr/--url/, "Output contiene '--url'");
 like($output, qr/--help/, "Output contiene '--help'");
 
 done_testing();
-
-

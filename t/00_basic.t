@@ -13,5 +13,3 @@ ok(-r $script, "Script offliner.pl è leggibile");
 ok(-x $script || $^O eq 'MSWin32', "Script offliner.pl è eseguibile (o su Windows)");
 
 done_testing();
-
-

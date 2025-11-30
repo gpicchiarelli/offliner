@@ -104,6 +104,7 @@ GetOptions(
     'user-agent=s'  => \$user_agent,
     'max-depth=i'   => \$max_depth,
     'max-threads=i' => \$max_threads,
+    'max-retries=i' => \$max_retries,
     'output-dir=s'  => \$output_dir,
     'verbose|v'     => \$verbose,
     'help|h'        => \$help,
@@ -111,6 +112,17 @@ GetOptions(
 
 usage() if $help;
 die "Devi specificare un URL con --url\n" unless $url;
+
+# Valida parametri
+if ($max_depth < 0) {
+    die "Errore: --max-depth deve essere >= 0\n";
+}
+if ($max_threads < 1) {
+    die "Errore: --max-threads deve essere >= 1\n";
+}
+if ($max_retries < 1) {
+    die "Errore: --max-retries deve essere >= 1\n";
+}
 
 # Valida URL
 my $uri = URI->new($url);
@@ -152,6 +164,10 @@ my $queue = Thread::Queue->new();
 # Flag per terminare i thread
 my $terminate :shared = 0;
 
+# Contatore thread attivi per monitoraggio efficiente
+my $active_threads :shared = $max_threads;
+my $threads_lock = Thread::Semaphore->new(1);
+
 # Avvio dei thread
 my @threads;
 for (1..$max_threads) {
@@ -170,17 +186,26 @@ $SIG{INT} = $SIG{TERM} = sub {
 $queue->enqueue([$url, 0]);
 
 # Monitora la coda e termina quando è vuota
-my $empty_count = 0;
-while (!$terminate) {
-    sleep 1;
+# Usa un meccanismo più efficiente: aspetta che tutti i thread siano inattivi
+# Attendi che la coda sia vuota e tutti i thread completati
+my $empty_wait = 0;
+while (!$terminate && $empty_wait < 5) {
     if ($queue->pending() == 0) {
-        $empty_count++;
-        # Aspetta 3 secondi con coda vuota prima di terminare
-        if ($empty_count >= 3) {
-            last;
+        $threads_lock->down();
+        my $active = $active_threads;
+        $threads_lock->up();
+        
+        if ($active == 0) {
+            $empty_wait++;
+            # Aspetta 1 secondo per essere sicuri che non ci siano nuovi job
+            sleep 1;
+        } else {
+            $empty_wait = 0;
+            sleep 0.5;
         }
     } else {
-        $empty_count = 0;
+        $empty_wait = 0;
+        sleep 0.5;
     }
 }
 
@@ -208,6 +233,7 @@ Opzioni:
   --user-agent STRING    User-Agent personalizzato
   --max-depth N          Profondità massima dei link (default: 50)
   --max-threads N        Numero massimo di thread (default: 10)
+  --max-retries N        Numero massimo di tentativi per URL (default: 3)
   --verbose, -v          Output verboso
   --help, -h             Mostra questo messaggio
 
@@ -222,13 +248,52 @@ EOF
 
 # Funzione per il thread worker
 sub worker_thread {
+    # Crea un LWP::UserAgent per thread (riutilizzabile)
+    my $ua = LWP::UserAgent->new;
+    $ua->ssl_opts(verify_hostname => 1);
+    $ua->timeout(DEFAULT_TIMEOUT);
+    $ua->agent($user_agent);
+    $ua->max_redirect(5);
+    
+    # Cache per directory già create (per thread)
+    my %dir_cache;
+    
     while (!$terminate) {
-        my $job = $queue->dequeue();
+        # Usa dequeue_timed per evitare busy waiting
+        my $job = $queue->dequeue_timed(1);
+        if (!defined $job) {
+            # Timeout - thread inattivo
+            $threads_lock->down();
+            $active_threads--;
+            $threads_lock->up();
+            
+            # Aspetta un po' prima di riprovare
+            sleep 0.1;
+            
+            $threads_lock->down();
+            $active_threads++;
+            $threads_lock->up();
+            next;
+        }
+        
         last if $job eq SENTINEL;
         
+        $threads_lock->down();
+        $active_threads--;
+        $threads_lock->up();
+        
         my ($url, $depth) = @$job;
-        download_page($url, $depth);
+        download_page($url, $depth, $ua, \%dir_cache);
+        
+        $threads_lock->down();
+        $active_threads++;
+        $threads_lock->up();
     }
+    
+    # Thread terminato
+    $threads_lock->down();
+    $active_threads--;
+    $threads_lock->up();
 }
 
 # Funzione per ottenere il titolo del sito
@@ -242,15 +307,19 @@ sub get_site_title {
 
 # Funzione per effettuare il download di un URL con retry
 sub fetch_url {
-    my ($url) = @_;
+    my ($url, $ua) = @_;
     my $response;
     my $retries = 0;
     
-    my $ua = LWP::UserAgent->new;
-    $ua->ssl_opts(verify_hostname => 1);
-    $ua->timeout(DEFAULT_TIMEOUT);
-    $ua->agent($user_agent);
-    $ua->max_redirect(5);
+    # Usa LWP::UserAgent passato come parametro (riutilizzabile)
+    $ua ||= do {
+        my $new_ua = LWP::UserAgent->new;
+        $new_ua->ssl_opts(verify_hostname => 1);
+        $new_ua->timeout(DEFAULT_TIMEOUT);
+        $new_ua->agent($user_agent);
+        $new_ua->max_redirect(5);
+        $new_ua;
+    };
 
     while ($retries < $max_retries) {
         eval {
@@ -306,7 +375,7 @@ sub get_encoding {
 
 # Funzione per scaricare e analizzare una pagina
 sub download_page {
-    my ($url, $depth) = @_;
+    my ($url, $depth, $ua, $dir_cache) = @_;
     
     return if $depth > $max_depth;
     return if $terminate;
@@ -323,7 +392,7 @@ sub download_page {
     print "[+] Scaricamento [$depth]: $url\n" if $verbose;
     
     # Recupera il contenuto della pagina
-    my $response = fetch_url($url);
+    my $response = fetch_url($url, $ua);
     unless ($response && $response->is_success) {
         $pages_lock->down();
         $pages_failed++;
@@ -339,10 +408,11 @@ sub download_page {
     my $path = uri_to_path($url, $is_html);
     my $full_path = File::Spec->catfile($output_dir, $path);
     
-    # Verifica che la directory di destinazione esista
+    # Verifica che la directory di destinazione esista (con cache)
     my $dir = dirname($full_path);
-    unless (-d $dir) {
+    unless ($dir_cache->{$dir} || -d $dir) {
         make_path($dir);
+        $dir_cache->{$dir} = 1;
     }
     
     # Scrivi il contenuto del file
@@ -582,11 +652,11 @@ oppure manualmente con:
 
 =over 4
 
-=item * Download parallelo multi-thread
+=item * Download parallelo multi-thread ottimizzato
 
 =item * Thread-safe con semafori per la sincronizzazione
 
-=item * Gestione errori con retry automatico
+=item * Gestione errori con retry automatico configurabile
 
 =item * Supporto HTTPS e SSL
 
@@ -594,11 +664,17 @@ oppure manualmente con:
 
 =item * Salvataggio intelligente dei file con struttura directory
 
-=item * Log degli errori
+=item * Log degli errori con timestamp
 
 =item * Terminazione pulita con gestione segnali
 
-=item * Statistiche di download
+=item * Statistiche di download in tempo reale
+
+=item * Riutilizzo LWP::UserAgent per migliori performance
+
+=item * Cache directory per ridurre chiamate filesystem
+
+=item * Monitoraggio efficiente thread con dequeue_timed
 
 =back
 
