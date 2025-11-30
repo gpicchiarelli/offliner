@@ -223,6 +223,15 @@ print "[+] Pagine fallite: $pages_failed\n";
 print "[+] File salvati in: $output_dir\n";
 print "[+] Log degli errori: $log_file\n";
 
+# Notifica macOS se disponibile
+if ($^O eq 'darwin' && !$terminate) {
+    send_macos_notification(
+        "Download completato",
+        "Pagine scaricate: $pages_downloaded\nPagine fallite: $pages_failed",
+        $output_dir
+    );
+}
+
 sub usage {
     print <<"EOF";
 Uso: $0 --url URL [opzioni]
@@ -539,6 +548,34 @@ sub sanitize_filename {
     $filename =~ s/_+/_/g;
     $filename =~ s/^_|_$//g;
     return $filename || 'download';
+}
+
+# Funzione per inviare notifiche macOS
+sub send_macos_notification {
+    my ($title, $message, $output_path) = @_;
+    
+    return unless $^O eq 'darwin';
+    
+    # Escape caratteri speciali per AppleScript
+    $title =~ s/"/\\"/g;
+    $message =~ s/"/\\"/g;
+    $output_path =~ s/"/\\"/g;
+    $message =~ s/\n/\\n/g;
+    
+    my $script = qq{
+        display notification "$message" with title "$title" subtitle "OffLiner" sound name "Glass"
+    };
+    
+    eval {
+        system('osascript', '-e', $script) == 0;
+    };
+    
+    # Apri Finder nella directory di output (opzionale)
+    if ($output_path && -d $output_path) {
+        eval {
+            system('open', $output_path) == 0;
+        };
+    }
 }
 
 __END__

@@ -1,41 +1,70 @@
-# Build artifacts
-!Build/
-.last_cover_stats
-/META.yml
-/META.json
-/MYMETA.*
-*.o
-*.pm.tdy
-*.bs
+# ============================================================================
+# Perl / CPAN Build Artifacts
+# ============================================================================
+# ExtUtils::MakeMaker
 /blib/
-/_eumm/
-/*.gz
 /Makefile
 /Makefile.old
-/MANIFEST.bak
 /pm_to_blib
-/*.zip
-*.tar.gz
-*.tar.bz2
-
-# Devel::Cover
-cover_db/
-
-# Devel::NYTProf
-nytprof.out
-
-# Dist::Zilla
-/.build/
+/MYMETA.*
+/META.yml
+/META.json
+/MANIFEST.bak
+*.o
+*.bs
+*.pm.tdy
 
 # Module::Build
 _build/
 Build
 Build.bat
+!Build/
 
 # Module::Install
 inc/
 
-# Application specific
+# Dist::Zilla
+/.build/
+/.dzil/
+
+# CPAN distribution files
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.zip
+*.gz
+OffLiner-*.tar.gz
+OffLiner-*/
+
+# EUMM (ExtUtils::MakeMaker)
+/_eumm/
+
+# ============================================================================
+# Testing & Coverage
+# ============================================================================
+# Devel::Cover
+cover_db/
+.cover/
+.last_cover_stats
+*.gcov
+*.gcda
+*.gcno
+
+# Devel::NYTProf
+nytprof.out
+nytprof/
+
+# Test::Harness
+*.t.bak
+*.t.orig
+
+# Test output
+test_output/
+*.test.log
+
+# ============================================================================
+# Application Specific
+# ============================================================================
 download_log.txt
 *.log
 build/
@@ -43,29 +72,251 @@ dist/
 *.pkg
 *-installer.pkg
 postinstall
+preinstall
 
-# CPAN distribution
-OffLiner-*.tar.gz
-OffLiner-*/
-blib/
-_eumm/
-Makefile
-Makefile.old
-pm_to_blib
-
-# OS specific
+# ============================================================================
+# Operating System Files
+# ============================================================================
+# macOS
 .DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
-Thumbs.db
-*~
+.AppleDouble
+.LSOverride
+Icon
+.DocumentRevisions-V100
+.fseventsd
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
 
-# IDE
-.vscode/
-.idea/
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.directory
+.Trash-*
+.nfs*
+
+# ============================================================================
+# Editor & IDE Files
+# ============================================================================
+# Vim
 *.swp
 *.swo
+*.swn
+*.swm
+*.un~
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+Session.vim
+Sessionx.vim
+.netrwhist
+tags
+[._]*.un~
+
+# Emacs
 *~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# VS Code / Cursor
+.vscode/
+.cursor/
+*.code-workspace
+.history/
+
+# IntelliJ IDEA / PyCharm / RubyMine / WebStorm
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# Atom
+.atom/
+
+# Eclipse
+.project
+.classpath
+.settings/
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.loadpath
+.recommenders
+
+# NetBeans
+nbproject/private/
+build/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+# TextMate
+*.tmproj
+*.tmproject
+tmtags
+
+# ============================================================================
+# Version Control
+# ============================================================================
+# Git (keep .gitignore itself)
+*.orig
+*.rej
+*_BACKUP_*
+*_BASE_*
+*_LOCAL_*
+*_REMOTE_*
+
+# SVN
+.svn/
+*.patch
+
+# ============================================================================
+# Temporary & Backup Files
+# ============================================================================
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+*.swp
+*~
+.#*
+\#*#
+
+# ============================================================================
+# Environment & Configuration
+# ============================================================================
+.env
+.env.local
+.env.*.local
+*.local
+config.local.*
+secrets.yml
+secrets.yaml
+*.secret
+*.key
+*.pem
+*.p12
+*.pfx
+
+# ============================================================================
+# Documentation Build
+# ============================================================================
+pod2htm*.tmp
+*.html
+!README.html
+
+# ============================================================================
+# Perl Specific
+# ============================================================================
+# Perl debugger
+.perldb
+
+# Perl profiler
+nytprof.out
+nytprof/
+
+# Perl::Critic
+.perlcriticrc.bak
+critic.log
+
+# Perl::Tidy
+*.tdy
+*.ERR
+
+# Local::Lib
+local/
+
+# Carton
+cpanfile.snapshot
+local/
+
+# cpanminus
+~/.cpanm/
+
+# ============================================================================
+# CI/CD
+# ============================================================================
+.circleci/
+.travis.yml.local
+.github/workflows/*.local.yml
+
+# ============================================================================
+# Miscellaneous
+# ============================================================================
+# Archives
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Compiled files
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+*.dylib
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+
+# Cache
+.cache/
+*.cache
+
+# Lock files (if using package managers)
+composer.lock
+package-lock.json
+yarn.lock
+Gemfile.lock

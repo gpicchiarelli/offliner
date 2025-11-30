@@ -23,23 +23,41 @@ jobs:
       with:
         perl-version: '5.36'
 
+    - name: Check if Perl supports threads
+      id: check_threads
+      run: |
+        if perl -e 'use threads;' 2>&1 | grep -q "not built to support threads"; then
+          echo "threads_supported=false" >> $GITHUB_OUTPUT
+          echo "❌ Perl does not support threads - cannot build distribution"
+          echo "::error::Perl must support threads to build OffLiner"
+          exit 1
+        else
+          echo "threads_supported=true" >> $GITHUB_OUTPUT
+          echo "✓ Perl supports threads"
+        fi
+
     - name: Install build dependencies
+      if: steps.check_threads.outputs.threads_supported == 'true'
       run: |
         cpanm --notest --quiet ExtUtils::MakeMaker Module::Build::Tiny
 
     - name: Install dependencies
+      if: steps.check_threads.outputs.threads_supported == 'true'
       run: |
         cpanm --notest --quiet --installdeps .
 
     - name: Validate distribution
+      if: steps.check_threads.outputs.threads_supported == 'true'
       run: |
         perl scripts/validate_cpan.pl
 
     - name: Build distribution
+      if: steps.check_threads.outputs.threads_supported == 'true'
       run: |
         perl scripts/build_cpan_dist.pl --skip-tests
 
     - name: Run tests
+      if: steps.check_threads.outputs.threads_supported == 'true'
       run: |
         perl Makefile.PL
         make test

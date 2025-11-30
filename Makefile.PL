@@ -6,7 +6,7 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     NAME                => 'OffLiner',
     VERSION_FROM        => 'offliner.pl',
-    ABSTRACT_FROM       => 'offliner.pl',
+    ABSTRACT            => 'Scaricatore di siti web offline',
     AUTHOR              => 'Giacomo Picchiarelli',
     LICENSE             => 'bsd',
     MIN_PERL_VERSION    => '5.014',

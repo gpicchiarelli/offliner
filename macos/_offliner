@@ -1,0 +1,43 @@
+#compdef offliner
+
+# Completamento automatico zsh per OffLiner
+# Installa in: /usr/local/share/zsh/site-functions/
+
+_offliner() {
+    local context state line
+    typeset -A opt_args
+
+    _arguments \
+        '1: :->command' \
+        '*:: :->args'
+
+    case $state in
+        command)
+            _arguments \
+                '--url[URL del sito da scaricare (obbligatorio)]:URL:_urls' \
+                '--output-dir[Directory di output]:directory:_files -/' \
+                '--user-agent[User-Agent personalizzato]:user-agent:' \
+                '--max-depth[Profondità massima dei link]:depth:' \
+                '--max-threads[Numero massimo di thread]:threads:' \
+                '--max-retries[Numero massimo di tentativi]:retries:' \
+                '(-v --verbose)'{-v,--verbose}'[Output verboso]' \
+                '(-h --help)'{-h,--help}'[Mostra messaggio di aiuto]'
+            ;;
+        args)
+            case $words[1] in
+                --url)
+                    _urls
+                    ;;
+                --output-dir)
+                    _files -/
+                    ;;
+                *)
+                    _files
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_offliner "$@"
+
