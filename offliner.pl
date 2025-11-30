@@ -22,6 +22,7 @@ use File::Path qw(make_path);
 use File::Spec;
 use Getopt::Long;
 use Time::Piece;
+use Time::HiRes qw(time);
 use threads;
 use threads::shared;
 use Thread::Queue;
@@ -34,6 +35,7 @@ use OffLiner::Logger qw(init log_error verbose info);
 use OffLiner::Platform::macOS qw(get_clipboard_url send_notification);
 use OffLiner::Version qw(check_for_updates);
 use OffLiner::Worker qw(worker_thread);
+use OffLiner::Stats qw(init_stats update_stats display_stats format_time get_elapsed_time);
 
 our $VERSION = '1.0.0';
 
@@ -192,7 +194,7 @@ my $threads_lock = Thread::Semaphore->new(1);
 # Avvio dei thread
 my @threads;
 for (1..$max_threads) {
-    push @threads, threads->create(\&worker_thread, {
+    push @threads, threads->create(\&OffLiner::Worker::worker_thread, {
         user_agent => $user_agent,
         max_retries => $max_retries,
         max_depth => $max_depth,
@@ -219,6 +221,25 @@ $SIG{INT} = $SIG{TERM} = sub {
     $queue->enqueue(SENTINEL) for 1..$max_threads;
 };
 
+# Inizializza statistiche
+init_stats();
+
+# Variabili per colori (dichiarate una sola volta)
+my $RESET = "\033[0m";
+my $BOLD = "\033[1m";
+my $CYAN = "\033[36m";
+my $GREEN = "\033[32m";
+
+# Messaggio iniziale
+binmode STDOUT, ':utf8'; # Gestisce correttamente i caratteri Unicode
+print "\n${CYAN}${BOLD}═══════════════════════════════════════════════════════════════════════${RESET}\n";
+print "${CYAN}${BOLD}  OffLiner - Avvio download${RESET}\n";
+print "${CYAN}${BOLD}═══════════════════════════════════════════════════════════════════════${RESET}\n";
+print "${CYAN}[URL]${RESET} $url\n";
+print "${CYAN}[OUTPUT]${RESET} $output_dir\n";
+print "${CYAN}[THREADS]${RESET} $max_threads  ${CYAN}[DEPTH]${RESET} $max_depth\n";
+print "${CYAN}${BOLD}═══════════════════════════════════════════════════════════════════════${RESET}\n\n";
+
 # Aggiungi il primo URL alla coda
 $queue->enqueue([$url, 0]);
 
@@ -226,7 +247,38 @@ $queue->enqueue([$url, 0]);
 # Usa un meccanismo più efficiente: aspetta che tutti i thread siano inattivi
 # Attendi che la coda sia vuota e tutti i thread completati
 my $empty_wait = 0;
+my $last_stats_update = 0;
 while (!$terminate && $empty_wait < 5) {
+    # Aggiorna e mostra statistiche ogni 0.5 secondi
+    my $current_time = time();
+    if ($current_time - $last_stats_update >= 0.5) {
+        $threads_lock->down();
+        my $active = $active_threads;
+        $threads_lock->up();
+        
+        $pages_lock->down();
+        my $downloaded = $pages_downloaded;
+        my $failed = $pages_failed;
+        $pages_lock->up();
+        
+        $visited_lock->down();
+        my $visited_count = scalar keys %visited;
+        $visited_lock->up();
+        
+        my $queue_size = $queue->pending();
+        
+        my $stats = update_stats(
+            $downloaded,
+            $failed,
+            $queue_size,
+            $active,
+            $visited_count
+        );
+        
+        display_stats($stats);
+        $last_stats_update = $current_time;
+    }
+    
     if ($queue->pending() == 0) {
         $threads_lock->down();
         my $active = $active_threads;
@@ -238,27 +290,64 @@ while (!$terminate && $empty_wait < 5) {
             sleep 1;
         } else {
             $empty_wait = 0;
-            sleep 0.5;
+            sleep 0.1;
         }
     } else {
         $empty_wait = 0;
-        sleep 0.5;
+        sleep 0.1;
     }
 }
 
 # Segnala terminazione ai thread
 $terminate = 1;
-$queue->enqueue(SENTINEL) for 1..$max_threads;
+# Invia sentinel a tutti i thread per assicurarsi che terminino
+# Invia più sentinel per essere sicuri che tutti i thread li ricevano
+$queue->enqueue(SENTINEL) for 1..($max_threads * 2);
 
 # Attendi che tutti i thread completino
-$_->join() for @threads;
+foreach my $thread (@threads) {
+    eval {
+        $thread->join();
+    };
+    if ($@) {
+        warn "Errore nel join del thread: $@\n" if $verbose;
+    }
+}
 
-# Stampa statistiche finali
-info("\n[+] Download completato.\n");
-info("[+] Pagine scaricate: $pages_downloaded\n");
-info("[+] Pagine fallite: $pages_failed\n");
-info("[+] File salvati in: $output_dir\n");
-info("[+] Log degli errori: $log_file\n");
+# Pulisci l'ultima visualizzazione e mostra statistiche finali
+print "\n";
+
+$pages_lock->down();
+my $final_downloaded = $pages_downloaded;
+my $final_failed = $pages_failed;
+$pages_lock->up();
+
+$visited_lock->down();
+my $final_visited = scalar keys %visited;
+$visited_lock->up();
+
+# Calcola tempo totale
+my $total_elapsed = get_elapsed_time();
+
+# Crea statistiche finali
+my $final_stats = {
+    elapsed => $total_elapsed,
+    pages_downloaded => $final_downloaded,
+    pages_failed => $final_failed,
+    queue_size => 0,
+    active_threads => 0,
+    visited_count => $final_visited,
+    rate => $total_elapsed > 0 ? $final_downloaded / $total_elapsed : 0,
+    total => $final_downloaded + $final_failed,
+};
+
+# Mostra statistiche finali
+display_stats($final_stats);
+
+# Messaggio di completamento (riusa le variabili già dichiarate)
+print "\n${GREEN}${BOLD}[SUCCESS]${RESET} Download completato con successo!\n";
+print "${CYAN}[INFO]${RESET} File salvati in: ${BOLD}$output_dir${RESET}\n";
+print "${CYAN}[INFO]${RESET} Log degli errori: ${BOLD}$log_file${RESET}\n";
 
 # Notifica macOS se disponibile
 if ($^O eq 'darwin' && !$terminate) {
