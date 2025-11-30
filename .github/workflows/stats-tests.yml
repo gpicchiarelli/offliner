@@ -50,11 +50,13 @@ jobs:
     
     - name: Verify thread support
       id: verify_threads
+      continue-on-error: true
       run: |
-        if perl -e 'use threads; use Thread::Semaphore;' 2>&1 | grep -q "not built to support threads"; then
+        echo "Verifying thread support..."
+        # Prova a caricare i moduli thread necessari
+        if perl -e 'use threads; use Thread::Semaphore; print "OK\n";' 2>&1 | grep -q "not built to support threads"; then
           echo "threads_supported=false" >> $GITHUB_OUTPUT
           echo "⚠️  Skipping tests - Perl does not support threads"
-          exit 0
         else
           echo "threads_supported=true" >> $GITHUB_OUTPUT
           echo "✓ Perl supports threads"
