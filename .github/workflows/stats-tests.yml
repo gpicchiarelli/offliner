@@ -1,0 +1,183 @@
+name: Statistics Tests with Threads
+
+on:
+  push:
+    branches: [ main, master, develop ]
+    paths:
+      - 'lib/OffLiner/Stats.pm'
+      - 't/12_stats.t'
+      - 't/13_stats_integration.t'
+      - 't/14_stats_display.t'
+      - 't/15_network_speed.t'
+      - 't/16_stats_formatting.t'
+      - 't/17_stats_threads.t'
+  pull_request:
+    branches: [ main, master, develop ]
+    paths:
+      - 'lib/OffLiner/Stats.pm'
+      - 't/12_stats.t'
+      - 't/13_stats_integration.t'
+      - 't/14_stats_display.t'
+      - 't/15_network_speed.t'
+      - 't/16_stats_formatting.t'
+      - 't/17_stats_threads.t'
+  workflow_dispatch:
+
+jobs:
+  stats-tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        perl-version: ['5.24', '5.30', '5.36']
+      fail-fast: false
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Perl
+      uses: shogo82148/actions-setup-perl@v1
+      with:
+        perl-version: ${{ matrix.perl-version }}
+    
+    - name: Cache CPAN modules
+      uses: actions/cache@v3
+      with:
+        path: ~/.cpanm
+        key: ${{ runner.os }}-cpanm-${{ matrix.perl-version }}-stats
+        restore-keys: |
+          ${{ runner.os }}-cpanm-${{ matrix.perl-version }}-
+    
+    - name: Verify thread support
+      id: verify_threads
+      run: |
+        if perl -e 'use threads; use Thread::Semaphore;' 2>&1 | grep -q "not built to support threads"; then
+          echo "threads_supported=false" >> $GITHUB_OUTPUT
+          echo "⚠️  Skipping tests - Perl does not support threads"
+          exit 0
+        else
+          echo "threads_supported=true" >> $GITHUB_OUTPUT
+          echo "✓ Perl supports threads"
+        fi
+    
+    - name: Install dependencies
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      run: |
+        cpanm --notest --quiet Time::HiRes
+    
+    - name: Test thread modules required by Stats
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      run: |
+        echo "=== Testing Thread Modules ==="
+        perl -e '
+          use strict;
+          use warnings;
+          use threads;
+          use Thread::Semaphore;
+          use threads::shared;
+          
+          print "✓ All thread modules loaded\n";
+          
+          # Test Thread::Semaphore (usato da Stats)
+          my $sem = Thread::Semaphore->new(1);
+          $sem->down();
+          $sem->up();
+          print "✓ Thread::Semaphore works\n";
+          
+          # Test shared variables (usato da Stats)
+          my $counter :shared = 0;
+          my @threads;
+          for (1..5) {
+            push @threads, threads->create(sub {
+              lock($counter);
+              $counter++;
+            });
+          }
+          $_->join() for @threads;
+          if ($counter == 5) {
+            print "✓ Shared variables work (counter=$counter)\n";
+          } else {
+            die "Shared variables failed: counter=$counter (expected 5)\n";
+          }
+        '
+    
+    - name: Run statistics tests
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      run: |
+        echo "=== Running Statistics Tests ==="
+        echo "Test 12_stats.t (37 tests)..."
+        perl -Ilib t/12_stats.t
+        
+        echo "Test 13_stats_integration.t (15 tests)..."
+        perl -Ilib t/13_stats_integration.t
+        
+        echo "Test 14_stats_display.t (11 tests)..."
+        perl -Ilib t/14_stats_display.t
+        
+        echo "Test 15_network_speed.t (13 tests)..."
+        perl -Ilib t/15_network_speed.t
+        
+        echo "Test 16_stats_formatting.t (24 tests)..."
+        perl -Ilib t/16_stats_formatting.t
+        
+        echo "Test 17_stats_threads.t (8 tests)..."
+        perl -Ilib t/17_stats_threads.t
+        
+        echo "✓ All statistics tests passed (108 tests total)"
+    
+    - name: Test Stats with concurrent threads
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      run: |
+        echo "=== Testing Stats with Concurrent Threads ==="
+        perl -Ilib -e '
+          use strict;
+          use warnings;
+          use threads;
+          use OffLiner::Stats qw(init_stats add_bytes get_total_bytes);
+          
+          init_stats();
+          
+          # Crea 10 thread che aggiungono bytes simultaneamente
+          my @threads;
+          for my $i (1..10) {
+            push @threads, threads->create(sub {
+              my $thread_id = shift;
+              for my $j (1..100) {
+                add_bytes($thread_id * 100 + $j);
+              }
+            }, $i);
+          }
+          
+          # Aspetta che tutti i thread finiscano
+          $_->join() for @threads;
+          
+          my $total = get_total_bytes();
+          my $expected = 0;
+          for my $i (1..10) {
+            for my $j (1..100) {
+              $expected += $i * 100 + $j;
+            }
+          }
+          
+          print "Total bytes: $total\n";
+          print "Expected: $expected\n";
+          
+          if ($total == $expected) {
+            print "✓ Concurrent thread test passed\n";
+            exit 0;
+          } else {
+            print "✗ Concurrent thread test failed\n";
+            exit 1;
+          }
+        '
+    
+    - name: Test summary
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      run: |
+        echo "=== Test Summary ==="
+        echo "OS: ${{ matrix.os }}"
+        echo "Perl Version: ${{ matrix.perl-version }}"
+        echo "Thread Support: ✓ Enabled"
+        echo "Statistics Tests: ✓ All passed"
+        echo "Concurrent Thread Tests: ✓ All passed"
+

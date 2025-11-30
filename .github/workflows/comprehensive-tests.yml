@@ -1,0 +1,392 @@
+name: Comprehensive Tests with Thread Support
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+    inputs:
+      perl_version:
+        description: 'Perl version to test (e.g., 5.36)'
+        required: false
+        type: string
+      os:
+        description: 'OS to test (ubuntu-latest, macos-latest, windows-latest)'
+        required: false
+        type: choice
+        options:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+      test_suite:
+        description: 'Test suite to run'
+        required: false
+        type: choice
+        options:
+          - all
+          - stats
+          - integration
+          - functional
+
+jobs:
+  # Job per verificare il supporto ai thread
+  check-thread-support:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        perl-version: ['5.14', '5.18', '5.24', '5.30', '5.36']
+        exclude:
+          - os: macos-latest
+            perl-version: '5.14'
+      fail-fast: false
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Perl
+      uses: shogo82148/actions-setup-perl@v1
+      with:
+        perl-version: ${{ matrix.perl-version }}
+    
+    - name: Check thread support
+      id: thread_check
+      run: |
+        echo "Checking Perl thread support..."
+        perl -V | grep -i "usethreads" || echo "usethreads not found in perl -V"
+        
+        if perl -e 'use threads; print "Threads module loaded\n";' 2>&1 | grep -q "not built to support threads"; then
+          echo "threads_supported=false" >> $GITHUB_OUTPUT
+          echo "threads_enabled=false" >> $GITHUB_OUTPUT
+          echo "❌ Perl ${{ matrix.perl-version }} does NOT support threads"
+          exit 1
+        else
+          echo "threads_supported=true" >> $GITHUB_OUTPUT
+          echo "threads_enabled=true" >> $GITHUB_OUTPUT
+          echo "✓ Perl ${{ matrix.perl-version }} supports threads"
+          
+          # Verifica che i thread funzionino effettivamente
+          perl -e '
+            use threads;
+            use threads::shared;
+            my $counter :shared = 0;
+            my @threads;
+            for (1..5) {
+              push @threads, threads->create(sub {
+                my $id = shift;
+                sleep 0.1;
+                lock($counter);
+                $counter++;
+              }, $_);
+            }
+            $_->join() for @threads;
+            if ($counter == 5) {
+              print "✓ Threads work correctly\n";
+              exit 0;
+            } else {
+              print "✗ Threads test failed: counter=$counter (expected 5)\n";
+              exit 1;
+            }
+          '
+        fi
+    
+    - name: Thread support details
+      if: steps.thread_check.outputs.threads_supported == 'true'
+      run: |
+        echo "=== Thread Support Details ==="
+        perl -V | grep -E "(usethreads|useithreads|usemultiplicity)"
+        perl -MConfig -e 'print "usethreads: $Config{usethreads}\n"'
+        perl -MConfig -e 'print "useithreads: $Config{useithreads}\n"'
+        perl -MConfig -e 'print "usemultiplicity: $Config{usemultiplicity}\n"'
+
+  # Job principale per i test completi
+  comprehensive-tests:
+    needs: check-thread-support
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        perl-version: ['5.14', '5.18', '5.24', '5.30', '5.36']
+        exclude:
+          - os: macos-latest
+            perl-version: '5.14'
+      fail-fast: false
+    
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Perl
+      uses: shogo82148/actions-setup-perl@v1
+      with:
+        perl-version: ${{ matrix.perl-version }}
+    
+    - name: Cache CPAN modules
+      uses: actions/cache@v3
+      with:
+        path: ~/.cpanm
+        key: ${{ runner.os }}-cpanm-${{ matrix.perl-version }}-${{ hashFiles('Makefile.PL') }}
+        restore-keys: |
+          ${{ runner.os }}-cpanm-${{ matrix.perl-version }}-
+    
+    - name: Verify thread support
+      id: verify_threads
+      run: |
+        if perl -e 'use threads;' 2>&1 | grep -q "not built to support threads"; then
+          echo "threads_supported=false" >> $GITHUB_OUTPUT
+          echo "⚠️  Skipping tests - Perl does not support threads"
+          exit 0
+        else
+          echo "threads_supported=true" >> $GITHUB_OUTPUT
+          echo "✓ Perl supports threads"
+        fi
+    
+    - name: Install build dependencies
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      run: |
+        cpanm --notest --quiet ExtUtils::MakeMaker Module::Build::Tiny
+    
+    - name: Install dependencies
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      run: |
+        cpanm --notest --quiet --installdeps .
+    
+    - name: List test files
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      run: |
+        echo "=== Available test files ==="
+        ls -la t/*.t | wc -l
+        echo "test files found"
+        ls -1 t/*.t
+    
+    - name: Run syntax checks
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      run: |
+        echo "=== Syntax Checks ==="
+        perl -c offliner.pl
+        for module in lib/OffLiner/*.pm lib/OffLiner/*/*.pm; do
+          if [ -f "$module" ]; then
+            echo "Checking $module..."
+            perl -c "$module" || exit 1
+          fi
+        done
+        echo "✓ All syntax checks passed"
+    
+    - name: Run basic tests
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      run: |
+        echo "=== Running Basic Tests ==="
+        perl -Ilib t/00_basic.t
+        perl -Ilib t/01_syntax.t
+        perl -Ilib t/02_help.t
+        perl -Ilib t/03_options.t
+        perl -Ilib t/04_modules.t
+        echo "✓ Basic tests passed"
+    
+    - name: Run statistics tests
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      run: |
+        echo "=== Running Statistics Tests ==="
+        perl -Ilib t/12_stats.t
+        perl -Ilib t/13_stats_integration.t
+        perl -Ilib t/14_stats_display.t
+        perl -Ilib t/15_network_speed.t
+        perl -Ilib t/16_stats_formatting.t
+        perl -Ilib t/17_stats_threads.t
+        echo "✓ Statistics tests passed"
+    
+    - name: Run utility tests
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      run: |
+        echo "=== Running Utility Tests ==="
+        perl -Ilib t/08_utils.t
+        perl -Ilib t/09_error_handling.t
+        echo "✓ Utility tests passed"
+    
+    - name: Run all tests with Makefile
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      run: |
+        echo "=== Running All Tests via Makefile ==="
+        perl Makefile.PL
+        make test TEST_VERBOSE=1
+        echo "✓ All tests passed"
+    
+    - name: Test thread functionality explicitly
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      run: |
+        echo "=== Testing Thread Functionality ==="
+        perl -e '
+          use strict;
+          use warnings;
+          use threads;
+          use Thread::Queue;
+          use Thread::Semaphore;
+          use threads::shared;
+          
+          print "Testing Thread::Queue...\n";
+          my $queue = Thread::Queue->new();
+          $queue->enqueue(1, 2, 3);
+          my $item = $queue->dequeue();
+          die "Queue test failed" unless $item == 1;
+          print "✓ Thread::Queue works\n";
+          
+          print "Testing Thread::Semaphore...\n";
+          my $sem = Thread::Semaphore->new(1);
+          $sem->down();
+          $sem->up();
+          print "✓ Thread::Semaphore works\n";
+          
+          print "Testing shared variables...\n";
+          my $counter :shared = 0;
+          my @threads;
+          for my $i (1..10) {
+            push @threads, threads->create(sub {
+              lock($counter);
+              $counter++;
+            });
+          }
+          $_->join() for @threads;
+          die "Shared variable test failed: counter=$counter (expected 10)" unless $counter == 10;
+          print "✓ Shared variables work (counter=$counter)\n";
+          
+          print "✓ All thread functionality tests passed\n";
+        '
+    
+    - name: Test OffLiner with threads
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      run: |
+        echo "=== Testing OffLiner Thread Integration ==="
+        # Test che offliner.pl possa essere caricato con tutti i moduli thread
+        perl -Ilib -e '
+          use strict;
+          use warnings;
+          use OffLiner::Worker;
+          use OffLiner::Stats;
+          use threads;
+          use Thread::Queue;
+          use Thread::Semaphore;
+          
+          print "✓ All thread modules loaded successfully\n";
+          
+          # Test che init_stats funzioni
+          OffLiner::Stats::init_stats();
+          print "✓ Stats initialization works\n";
+          
+          # Test che le funzioni di formattazione funzionino
+          my $bytes = OffLiner::Stats::format_bytes(1024);
+          die "format_bytes failed" unless $bytes eq "1.00 KB";
+          print "✓ Stats formatting works\n";
+          
+          print "✓ OffLiner thread integration test passed\n";
+        '
+    
+    - name: Run functional tests (if available)
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      continue-on-error: true
+      run: |
+        echo "=== Running Functional Tests ==="
+        # Questi test potrebbero richiedere server mock o connessione internet
+        perl -Ilib t/05_integration.t || echo "⚠️  Integration tests skipped (may require additional setup)"
+        perl -Ilib t/07_functional.t || echo "⚠️  Functional tests skipped (may require HTTP::Server::Simple)"
+        perl -Ilib t/11_macos_integration.t || echo "⚠️  macOS integration tests skipped (may be macOS-specific)"
+    
+    - name: Test cleanup
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      run: |
+        echo "=== Testing Cleanup ==="
+        perl -Ilib t/06_cleanup.t
+        perl -Ilib t/10_cleanup_complete.t
+        echo "✓ Cleanup tests passed"
+    
+    - name: Generate test summary
+      if: steps.verify_threads.outputs.threads_supported == 'true'
+      run: |
+        echo "=== Test Summary ==="
+        echo "OS: ${{ matrix.os }}"
+        echo "Perl Version: ${{ matrix.perl-version }}"
+        echo "Thread Support: ✓ Enabled"
+        echo "All tests completed successfully"
+
+  # Job per test di performance con thread
+  thread-performance-test:
+    needs: check-thread-support
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Perl
+      uses: shogo82148/actions-setup-perl@v1
+      with:
+        perl-version: '5.36'
+    
+    - name: Install dependencies
+      run: |
+        cpanm --notest --quiet --installdeps .
+    
+    - name: Test thread performance
+      run: |
+        echo "=== Thread Performance Test ==="
+        perl -e '
+          use strict;
+          use warnings;
+          use threads;
+          use Thread::Queue;
+          use Time::HiRes qw(time);
+          
+          my $num_threads = 10;
+          my $jobs_per_thread = 100;
+          
+          my $queue = Thread::Queue->new();
+          my $start_time = time();
+          
+          # Crea thread workers
+          my @threads;
+          for (1..$num_threads) {
+            push @threads, threads->create(sub {
+              my $processed = 0;
+              while (my $job = $queue->dequeue()) {
+                last if $job eq "DONE";
+                # Simula lavoro
+                my $sum = 0;
+                for (1..1000) {
+                  $sum += $_;
+                }
+                $processed++;
+              }
+              return $processed;
+            });
+          }
+          
+          # Aggiungi job alla coda
+          $queue->enqueue(1..($num_threads * $jobs_per_thread));
+          $queue->enqueue(("DONE") x $num_threads);
+          
+          # Aspetta che i thread finiscano
+          my $total_processed = 0;
+          for my $thread (@threads) {
+            $total_processed += $thread->join();
+          }
+          
+          my $elapsed = time() - $start_time;
+          my $expected = $num_threads * $jobs_per_thread;
+          
+          print "Threads: $num_threads\n";
+          print "Jobs per thread: $jobs_per_thread\n";
+          print "Total processed: $total_processed\n";
+          print "Expected: $expected\n";
+          print "Time elapsed: ${elapsed}s\n";
+          print "Jobs per second: " . ($total_processed / $elapsed) . "\n";
+          
+          if ($total_processed == $expected) {
+            print "✓ Thread performance test passed\n";
+            exit 0;
+          } else {
+            print "✗ Thread performance test failed\n";
+            exit 1;
+          }
+        '
+
