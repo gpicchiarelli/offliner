@@ -356,11 +356,31 @@ jobs:
       with:
         perl-version: '5.36'
     
+    - name: Verify thread support
+      id: verify_threads
+      continue-on-error: true
+      run: |
+        echo "Verifying thread support for performance test..."
+        # Verifica tramite perl -V:useithreads
+        THREAD_CHECK=$(perl -V:useithreads 2>&1 || echo "")
+        if echo "$THREAD_CHECK" | grep -q "useithreads='define'"; then
+          echo "threads_supported=true" >> $GITHUB_OUTPUT
+          echo "✓ Threads enabled via useithreads"
+        elif perl -e 'use threads; print "OK\n";' 2>&1 | grep -q "not built to support threads"; then
+          echo "threads_supported=false" >> $GITHUB_OUTPUT
+          echo "⚠️  Perl does not support threads - performance test will be skipped"
+        else
+          echo "threads_supported=true" >> $GITHUB_OUTPUT
+          echo "✓ Threads module loads successfully"
+        fi
+    
     - name: Install dependencies
+      if: steps.verify_threads.outputs.threads_supported == 'true'
       run: |
         cpanm --notest --quiet --installdeps .
     
     - name: Test thread performance
+      if: steps.verify_threads.outputs.threads_supported == 'true'
       run: |
         echo "=== Thread Performance Test ==="
         perl -e '
@@ -422,4 +442,10 @@ jobs:
             exit 1;
           }
         '
+    
+    - name: Skip message if threads not supported
+      if: steps.verify_threads.outputs.threads_supported != 'true'
+      run: |
+        echo "⚠️  Thread performance test skipped - Perl does not support threads"
+        echo "This is expected if Perl was built without thread support"
 
