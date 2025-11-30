@@ -10,7 +10,7 @@ Version 1.0.0
 
 =cut
 
-use 5.010;
+use 5.014;
 use strict;
 use warnings;
 use utf8;
@@ -604,7 +604,7 @@ Mostra il messaggio di aiuto e esce.
 
 =head1 REQUIREMENTS
 
-Perl 5.10 o superiore e i seguenti moduli:
+Perl 5.14 o superiore e i seguenti moduli:
 
 =over 4
 

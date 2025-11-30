@@ -1,4 +1,4 @@
-use 5.010;
+use 5.014;
 use strict;
 use warnings;
 use ExtUtils::MakeMaker;
@@ -9,7 +9,7 @@ WriteMakefile(
     ABSTRACT_FROM       => 'offliner.pl',
     AUTHOR              => 'Giacomo Picchiarelli',
     LICENSE             => 'bsd',
-    MIN_PERL_VERSION    => '5.010',
+    MIN_PERL_VERSION    => '5.014',
     PREREQ_PM => {
         'LWP::UserAgent'     => '6.00',
         'URI'                => '1.60',
@@ -33,7 +33,9 @@ WriteMakefile(
         TESTS => 't/*.t',
         RECURSIVE_TEST_FILES => 1,
     },
-    TEST_REQUIRES => {
+    # BUILD_REQUIRES è supportato da Perl 5.10+, TEST_REQUIRES solo da 5.14+
+    # Usiamo BUILD_REQUIRES per compatibilità con versioni più vecchie di MakeMaker
+    BUILD_REQUIRES => {
         'Test::More'          => '0.88',
         'File::Temp'          => '0.22',
         'File::Spec'          => '3.40',

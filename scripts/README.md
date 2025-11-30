@@ -81,7 +81,7 @@ cpan-upload OffLiner-*.tar.gz
 
 ## Requisiti
 
-- Perl 5.10+
+- Perl 5.14+
 - `ExtUtils::MakeMaker`
 - `JSON::PP` (per validate_cpan.pl)
 - `make` (sistema Unix)

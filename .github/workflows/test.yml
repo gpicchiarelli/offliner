@@ -12,12 +12,11 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        perl-version: ['5.10', '5.14', '5.18', '5.24', '5.30', '5.36']
+        perl-version: ['5.14', '5.18', '5.24', '5.30', '5.36']
         exclude:
           - os: macos-latest
-            perl-version: '5.10'
-          - os: macos-latest
             perl-version: '5.14'
+      fail-fast: false
 
     steps:
     - uses: actions/checkout@v3
@@ -35,14 +34,20 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cpanm-${{ matrix.perl-version }}-
 
+    - name: Install build dependencies
+      run: |
+        cpanm --notest --quiet ExtUtils::MakeMaker
+
     - name: Install dependencies
       run: |
-        cpanm --notest --installdeps .
+        cpanm --notest --quiet --installdeps .
+      continue-on-error: false
 
     - name: Run tests
       run: |
         perl Makefile.PL
         make test
+      continue-on-error: false
 
     - name: Syntax check
       run: |
