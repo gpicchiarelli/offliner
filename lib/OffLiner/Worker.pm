@@ -104,6 +104,8 @@ sub worker_thread {
 
 __END__
 
+=encoding UTF-8
+
 =head1 NAME
 
 OffLiner::Worker - Thread worker per download parallelo
@@ -111,7 +113,7 @@ OffLiner::Worker - Thread worker per download parallelo
 =head1 SYNOPSIS
 
     use OffLiner::Worker;
-    
+
     my $thread = threads->create(\&OffLiner::Worker::worker_thread, $params);
 
 =head1 DESCRIPTION

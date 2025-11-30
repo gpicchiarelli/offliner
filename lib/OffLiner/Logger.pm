@@ -51,6 +51,8 @@ sub info {
 
 __END__
 
+=encoding UTF-8
+
 =head1 NAME
 
 OffLiner::Logger - Sistema di logging per OffLiner
@@ -58,7 +60,7 @@ OffLiner::Logger - Sistema di logging per OffLiner
 =head1 SYNOPSIS
 
     use OffLiner::Logger;
-    
+
     OffLiner::Logger::init($log_file, $verbose);
     OffLiner::Logger::log_error("Errore durante il download");
     OffLiner::Logger::verbose("[+] Scaricamento: $url\n");

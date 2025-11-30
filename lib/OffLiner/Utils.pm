@@ -76,6 +76,8 @@ sub validate_url {
 
 __END__
 
+=encoding UTF-8
+
 =head1 NAME
 
 OffLiner::Utils - Funzioni utility per OffLiner
@@ -83,7 +85,7 @@ OffLiner::Utils - Funzioni utility per OffLiner
 =head1 SYNOPSIS
 
     use OffLiner::Utils;
-    
+
     my $title = OffLiner::Utils::get_site_title('https://example.com');
     my $path = OffLiner::Utils::uri_to_path($url, 1);
     my $clean = OffLiner::Utils::sanitize_filename('test file.html');

@@ -282,6 +282,8 @@ sub get_elapsed_time {
 
 __END__
 
+=encoding UTF-8
+
 =head1 NAME
 
 OffLiner::Stats - Sistema di statistiche per OffLiner
@@ -289,7 +291,7 @@ OffLiner::Stats - Sistema di statistiche per OffLiner
 =head1 SYNOPSIS
 
     use OffLiner::Stats qw(init_stats update_stats display_stats);
-    
+
     init_stats();
     my $stats = update_stats($pages_downloaded, $pages_failed, $queue_size, $active_threads, $visited_count);
     display_stats($stats);

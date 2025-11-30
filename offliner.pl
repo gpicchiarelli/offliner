@@ -419,6 +419,8 @@ EOF
 
 __END__
 
+=encoding UTF-8
+
 =head1 SYNOPSIS
 
     perl offliner.pl --url https://example.com [opzioni]

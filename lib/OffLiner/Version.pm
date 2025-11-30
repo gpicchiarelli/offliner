@@ -63,6 +63,8 @@ sub check_for_updates {
 
 __END__
 
+=encoding UTF-8
+
 =head1 NAME
 
 OffLiner::Version - Gestione versioni e aggiornamenti
@@ -70,7 +72,7 @@ OffLiner::Version - Gestione versioni e aggiornamenti
 =head1 SYNOPSIS
 
     use OffLiner::Version;
-    
+
     my $cmp = OffLiner::Version::version_compare('1.0.0', '1.0.1');
     my $latest = OffLiner::Version::check_for_updates($current_version, $verbose);
 

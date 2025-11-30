@@ -76,6 +76,8 @@ sub send_notification {
 
 __END__
 
+=encoding UTF-8
+
 =head1 NAME
 
 OffLiner::Platform::macOS - Funzioni specifiche per macOS
@@ -83,7 +85,7 @@ OffLiner::Platform::macOS - Funzioni specifiche per macOS
 =head1 SYNOPSIS
 
     use OffLiner::Platform::macOS;
-    
+
     my $url = OffLiner::Platform::macOS::get_clipboard_url();
     OffLiner::Platform::macOS::send_notification($title, $message, $path, $success);
 

@@ -250,6 +250,8 @@ sub download_page {
 
 __END__
 
+=encoding UTF-8
+
 =head1 NAME
 
 OffLiner::Downloader - Logica di download per OffLiner
@@ -257,7 +259,7 @@ OffLiner::Downloader - Logica di download per OffLiner
 =head1 SYNOPSIS
 
     use OffLiner::Downloader;
-    
+
     my $ua = OffLiner::Downloader::create_user_agent($user_agent, $timeout);
     my $response = OffLiner::Downloader::fetch_url($url, $ua, $max_retries, $verbose);
     OffLiner::Downloader::download_page(...);

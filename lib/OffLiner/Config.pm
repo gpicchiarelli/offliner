@@ -66,6 +66,8 @@ sub validate_params {
 
 __END__
 
+=encoding UTF-8
+
 =head1 NAME
 
 OffLiner::Config - Gestione configurazione per OffLiner
@@ -73,7 +75,7 @@ OffLiner::Config - Gestione configurazione per OffLiner
 =head1 SYNOPSIS
 
     use OffLiner::Config;
-    
+
     my %config = OffLiner::Config::load_config();
     my $max_depth = $config{default_max_depth} // OffLiner::Config::DEFAULT_MAX_DEPTH;
 

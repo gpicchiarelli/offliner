@@ -106,6 +106,8 @@ sub extract_links {
 
 __END__
 
+=encoding UTF-8
+
 =head1 NAME
 
 OffLiner::Parser - Parsing HTML e estrazione link
@@ -113,7 +115,7 @@ OffLiner::Parser - Parsing HTML e estrazione link
 =head1 SYNOPSIS
 
     use OffLiner::Parser;
-    
+
     my $encoding = OffLiner::Parser::get_encoding($response);
     my @links = OffLiner::Parser::extract_links($html_content, $base_url, $callback);
 
