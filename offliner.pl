@@ -17,7 +17,15 @@ use utf8;
 use autodie;
 
 use FindBin qw($Bin);
-use lib "$FindBin::Bin/lib", "$FindBin::Bin";
+# Decontaminazione dei percorsi per taint mode (-t flag)
+BEGIN {
+    my $lib_dir = "$FindBin::Bin/lib";
+    my $bin_dir = "$FindBin::Bin";
+    # Rimuovi taint dai percorsi (sono controllati dallo sviluppatore, non da input esterno)
+    ($lib_dir) = $lib_dir =~ /^(.+)$/;
+    ($bin_dir) = $bin_dir =~ /^(.+)$/;
+    unshift @INC, $lib_dir, $bin_dir;
+}
 use File::Path qw(make_path);
 use File::Spec;
 use Getopt::Long;
@@ -229,6 +237,8 @@ my $RESET = "\033[0m";
 my $BOLD = "\033[1m";
 my $CYAN = "\033[38;5;30m";    # Ciano scuro
 my $GREEN = "\033[38;5;34m";   # Verde scuro
+my $RED = "\033[38;5;88m";     # Rosso scuro
+my $YELLOW = "\033[38;5;136m"; # Giallo/arancione scuro
 
 # Messaggio iniziale
 binmode STDOUT, ':utf8'; # Gestisce correttamente i caratteri Unicode
@@ -252,6 +262,16 @@ my $IDLE_SLEEP = 0.1;  # Sleep quando c'è lavoro (ridotto per essere più reatt
 my $EMPTY_SLEEP = 0.3;  # Sleep quando coda vuota (ridotto per terminare più velocemente)
 my $MAX_EMPTY_WAIT = 3;  # Ridotto da 5 a 3 per terminare più velocemente
 
+# Tracciamento errori per terminazione anticipata su errori critici
+my $last_downloaded_count = 0;
+my $last_failed_count = 0;
+my $consecutive_failures = 0;
+my $MAX_CONSECUTIVE_FAILURES = 10;  # Termina se 10 errori consecutivi senza successi
+
+# Tracciamento per rilevare quando non c'è più lavoro (tutti i thread falliscono)
+my $last_activity_time = time();  # Ultima volta che c'è stata attività (download o errore)
+my $NO_ACTIVITY_TIMEOUT = 2;  # Se non c'è attività per 2 secondi, termina
+
 while (!$terminate && $empty_wait < $MAX_EMPTY_WAIT) {
     my $current_time = time();
     my $queue_size = $queue->pending();
@@ -271,6 +291,29 @@ while (!$terminate && $empty_wait < $MAX_EMPTY_WAIT) {
         $visited_lock->down();
         my $visited_count = scalar keys %visited;
         $visited_lock->up();
+        
+        # Verifica se c'è stata attività (nuovi download o errori)
+        my $has_activity = ($downloaded != $last_downloaded_count) || ($failed != $last_failed_count);
+        if ($has_activity) {
+            $last_activity_time = $current_time;  # Aggiorna tempo ultima attività
+        }
+        
+        # Verifica errori consecutivi per terminazione anticipata
+        if ($downloaded == $last_downloaded_count && $failed > $last_failed_count) {
+            # Nuovo errore senza nuovi successi
+            $consecutive_failures++;
+            if ($consecutive_failures >= $MAX_CONSECUTIVE_FAILURES) {
+                info("\n[!] Troppi errori consecutivi ($consecutive_failures). Terminazione anticipata.\n");
+                log_error("Terminazione anticipata: $consecutive_failures errori consecutivi senza successi");
+                $terminate = 1;
+                last;
+            }
+        } elsif ($downloaded > $last_downloaded_count) {
+            # Reset contatore se c'è stato un successo
+            $consecutive_failures = 0;
+        }
+        $last_downloaded_count = $downloaded;
+        $last_failed_count = $failed;
         
         my $stats = update_stats(
             $downloaded,
@@ -292,15 +335,37 @@ while (!$terminate && $empty_wait < $MAX_EMPTY_WAIT) {
         $threads_lock->up();
         
         if ($active == 0) {
+            # Tutti i thread sono inattivi e la coda è vuota
+            # Verifica se non c'è stata attività di recente
+            my $time_since_activity = $current_time - $last_activity_time;
+            if ($time_since_activity >= $NO_ACTIVITY_TIMEOUT) {
+                # Non c'è stata attività per un po', probabilmente non c'è più lavoro
+                info("\n[!] Nessuna attività per ${time_since_activity}s. Terminazione.\n");
+                log_error("Terminazione: nessuna attività per ${time_since_activity} secondi");
+                $terminate = 1;
+                last;
+            }
             $empty_wait++;
             # Aspetta un po' per essere sicuri che non ci siano nuovi job in arrivo
             sleep $EMPTY_SLEEP;  # Sleep più lungo quando tutto è vuoto
         } else {
+            # Ci sono thread attivi, ma la coda è vuota
+            # Verifica se i thread stanno solo aspettando (nessuna attività recente)
+            my $time_since_activity = $current_time - $last_activity_time;
+            if ($time_since_activity >= $NO_ACTIVITY_TIMEOUT) {
+                # I thread sono "attivi" ma non stanno facendo nulla
+                # Probabilmente stanno solo aspettando e non c'è più lavoro
+                info("\n[!] Thread inattivi senza attività per ${time_since_activity}s. Terminazione.\n");
+                log_error("Terminazione: thread inattivi senza attività per ${time_since_activity} secondi");
+                $terminate = 1;
+                last;
+            }
             $empty_wait = 0;  # Reset se ci sono thread attivi
             sleep $IDLE_SLEEP;  # Sleep breve se ci sono thread attivi
         }
     } else {
         $empty_wait = 0;  # Reset se c'è lavoro nella coda
+        $last_activity_time = $current_time;  # Reset timeout attività quando c'è lavoro
         # Sleep breve quando c'è lavoro da fare per essere più reattivi
         sleep $IDLE_SLEEP;
     }
@@ -353,8 +418,20 @@ my $final_stats = {
 # Mostra statistiche finali
 display_stats($final_stats);
 
-# Messaggio di completamento (riusa le variabili già dichiarate)
-print "\n${GREEN}${BOLD}[SUCCESS]${RESET} Download completato con successo!\n";
+# Messaggio di completamento basato sul risultato
+if ($final_failed > 0 && $final_downloaded == 0) {
+    # Fallimento completo
+    print "\n${RED}${BOLD}[ERROR]${RESET} Download fallito completamente!\n";
+    print "${RED}Nessuna pagina scaricata. Pagine fallite: $final_failed${RESET}\n";
+} elsif ($final_failed > 0) {
+    # Successo parziale con errori
+    print "\n${YELLOW}${BOLD}[WARNING]${RESET} Download completato con errori!\n";
+    print "${GREEN}Pagine scaricate: $final_downloaded${RESET}  ${RED}Pagine fallite: $final_failed${RESET}\n";
+} else {
+    # Successo completo
+    print "\n${GREEN}${BOLD}[SUCCESS]${RESET} Download completato con successo!\n";
+    print "${GREEN}Pagine scaricate: $final_downloaded${RESET}\n";
+}
 print "${CYAN}[INFO]${RESET} File salvati in: ${BOLD}$output_dir${RESET}\n";
 print "${CYAN}[INFO]${RESET} Log degli errori: ${BOLD}$log_file${RESET}\n";
 
@@ -364,19 +441,19 @@ if ($^O eq 'darwin' && !$terminate) {
     my $open_finder = $config{open_finder_on_complete} // 1;
     
     if ($notify) {
-        if ($pages_failed > 0 && $pages_downloaded == 0) {
+        if ($final_failed > 0 && $final_downloaded == 0) {
             # Tutto fallito
             send_notification(
                 "Download fallito",
-                "Impossibile scaricare il sito.\nPagine fallite: $pages_failed",
+                "Impossibile scaricare il sito.\nPagine fallite: $final_failed",
                 undef,
                 0
             );
-        } elsif ($pages_failed > 0) {
+        } elsif ($final_failed > 0) {
             # Parziale
             send_notification(
                 "Download completato con errori",
-                "Pagine scaricate: $pages_downloaded\nPagine fallite: $pages_failed",
+                "Pagine scaricate: $final_downloaded\nPagine fallite: $final_failed",
                 $open_finder ? $output_dir : undef,
                 0
             );
@@ -384,7 +461,7 @@ if ($^O eq 'darwin' && !$terminate) {
             # Successo
             send_notification(
                 "Download completato",
-                "Pagine scaricate: $pages_downloaded\nPagine fallite: $pages_failed",
+                "Pagine scaricate: $final_downloaded\nPagine fallite: $final_failed",
                 $open_finder ? $output_dir : undef,
                 1
             );

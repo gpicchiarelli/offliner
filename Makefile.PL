@@ -28,6 +28,7 @@ WriteMakefile(
         'Mozilla::CA'         => '20160104',
         'JSON::PP'            => '2.00',
         'FindBin'             => 0,
+        'Digest::SHA'         => '5.47',
     },
     EXE_FILES           => ['offliner.pl'],
     test => {

@@ -7,7 +7,7 @@ use FindBin qw($Bin);
 use lib "$Bin/../lib";
 
 # Test POD documentation coverage
-plan tests => 2;
+# Non pianifichiamo il numero di test perché dipende dai moduli disponibili
 
 # Test che Test::Pod sia disponibile
 SKIP: {
