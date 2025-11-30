@@ -17,37 +17,30 @@ use utf8;
 use autodie;
 
 use FindBin qw($Bin);
+use lib "$FindBin::Bin/lib", "$FindBin::Bin";
 use File::Path qw(make_path);
 use File::Spec;
-use File::Basename;
 use Getopt::Long;
 use Time::Piece;
 use threads;
 use threads::shared;
 use Thread::Queue;
 use Thread::Semaphore;
-use LWP::UserAgent;
-use URI;
-use Encode qw(decode encode);
-use HTML::LinkExtor;
-use HTML::HeadParser;
-use IO::Socket::SSL;
-use Mozilla::CA;
-use JSON::PP qw(decode_json encode_json);
+
+# Moduli OffLiner
+use OffLiner::Config qw(load_config validate_params);
+use OffLiner::Utils qw(get_site_title sanitize_filename validate_url);
+use OffLiner::Logger qw(init log_error verbose info);
+use OffLiner::Platform::macOS qw(get_clipboard_url send_notification);
+use OffLiner::Version qw(check_for_updates);
+use OffLiner::Worker qw(worker_thread);
 
 our $VERSION = '1.0.0';
 
 $0 = "offliner";
 
-# Costanti
-use constant {
-    DEFAULT_MAX_DEPTH   => 50,
-    DEFAULT_MAX_THREADS => 10,
-    DEFAULT_MAX_RETRIES => 3,
-    DEFAULT_TIMEOUT     => 30,
-    DEFAULT_USER_AGENT  => 'Mozilla/5.0 (compatible; OffLinerBot/1.0)',
-    SENTINEL            => '__TERMINATE__',
-};
+# Costante sentinel
+use constant SENTINEL => '__TERMINATE__';
 
 # Lista dei moduli necessari
 my @required_modules = qw(
@@ -90,17 +83,16 @@ sub check_and_install_modules {
 
 check_and_install_modules();
 
-# Carica configurazione persistente (macOS)
-my $config_file = $ENV{HOME} . '/.config/offliner/config.json';
+# Carica configurazione persistente
 my %config = load_config();
 
 # Variabili di configurazione
 my $url;
 my $output_dir = "";
-my $user_agent = DEFAULT_USER_AGENT;
-my $max_depth = $config{default_max_depth} // DEFAULT_MAX_DEPTH;
-my $max_threads = $config{default_max_threads} // DEFAULT_MAX_THREADS;
-my $max_retries = $config{default_max_retries} // DEFAULT_MAX_RETRIES;
+my $user_agent = OffLiner::Config::DEFAULT_USER_AGENT();
+my $max_depth = $config{default_max_depth} // OffLiner::Config::DEFAULT_MAX_DEPTH();
+my $max_threads = $config{default_max_threads} // OffLiner::Config::DEFAULT_MAX_THREADS();
+my $max_retries = $config{default_max_retries} // OffLiner::Config::DEFAULT_MAX_RETRIES();
 my $verbose = 0;
 my $help = 0;
 my $clipboard = 0;
@@ -124,35 +116,30 @@ usage() if $help;
 
 # Verifica aggiornamenti se richiesto
 if ($check_update) {
-    check_for_updates();
+    check_for_updates($VERSION, $verbose);
     exit 0;
 }
 
 # Supporto clipboard (macOS)
-if ($clipboard && $^O eq 'darwin') {
+if ($clipboard) {
     $url = get_clipboard_url();
     unless ($url) {
         die "Nessun URL trovato nella clipboard\n";
     }
-    print "[+] URL dalla clipboard: $url\n" if $verbose;
+    verbose("[+] URL dalla clipboard: $url\n");
 }
 
 die "Devi specificare un URL con --url o usare --clipboard\n" unless $url;
 
 # Valida parametri
-if ($max_depth < 0) {
-    die "Errore: --max-depth deve essere >= 0\n";
-}
-if ($max_threads < 1) {
-    die "Errore: --max-threads deve essere >= 1\n";
-}
-if ($max_retries < 1) {
-    die "Errore: --max-retries deve essere >= 1\n";
-}
+validate_params(
+    max_depth => $max_depth,
+    max_threads => $max_threads,
+    max_retries => $max_retries
+);
 
 # Valida URL
-my $uri = URI->new($url);
-unless ($uri->scheme && ($uri->scheme eq 'http' || $uri->scheme eq 'https')) {
+unless (validate_url($url)) {
     die "URL non valido. Deve essere http:// o https://\n";
 }
 
@@ -178,6 +165,9 @@ if ($@) {
 # File di log nella directory di output
 my $log_file = File::Spec->catfile($output_dir, 'download_log.txt');
 
+# Inizializza logger
+init($log_file, $verbose);
+
 # Hash condiviso per tracciare i link visitati (thread-safe)
 my %visited :shared;
 
@@ -202,12 +192,28 @@ my $threads_lock = Thread::Semaphore->new(1);
 # Avvio dei thread
 my @threads;
 for (1..$max_threads) {
-    push @threads, threads->create(\&worker_thread);
+    push @threads, threads->create(\&worker_thread, {
+        user_agent => $user_agent,
+        max_retries => $max_retries,
+        max_depth => $max_depth,
+        output_dir => $output_dir,
+        queue => $queue,
+        visited => \%visited,
+        visited_lock => $visited_lock,
+        pages_downloaded => \$pages_downloaded,
+        pages_failed => \$pages_failed,
+        pages_lock => $pages_lock,
+        terminate => \$terminate,
+        active_threads => \$active_threads,
+        threads_lock => $threads_lock,
+        verbose => $verbose,
+        SENTINEL => SENTINEL,
+    });
 }
 
 # Gestione segnali per terminazione pulita
 $SIG{INT} = $SIG{TERM} = sub {
-    print "\n[!] Interruzione ricevuta. Terminazione in corso...\n";
+    info("\n[!] Interruzione ricevuta. Terminazione in corso...\n");
     $terminate = 1;
     # Invia sentinel a tutti i thread
     $queue->enqueue(SENTINEL) for 1..$max_threads;
@@ -248,11 +254,11 @@ $queue->enqueue(SENTINEL) for 1..$max_threads;
 $_->join() for @threads;
 
 # Stampa statistiche finali
-print "\n[+] Download completato.\n";
-print "[+] Pagine scaricate: $pages_downloaded\n";
-print "[+] Pagine fallite: $pages_failed\n";
-print "[+] File salvati in: $output_dir\n";
-print "[+] Log degli errori: $log_file\n";
+info("\n[+] Download completato.\n");
+info("[+] Pagine scaricate: $pages_downloaded\n");
+info("[+] Pagine fallite: $pages_failed\n");
+info("[+] File salvati in: $output_dir\n");
+info("[+] Log degli errori: $log_file\n");
 
 # Notifica macOS se disponibile
 if ($^O eq 'darwin' && !$terminate) {
@@ -262,7 +268,7 @@ if ($^O eq 'darwin' && !$terminate) {
     if ($notify) {
         if ($pages_failed > 0 && $pages_downloaded == 0) {
             # Tutto fallito
-            send_macos_notification(
+            send_notification(
                 "Download fallito",
                 "Impossibile scaricare il sito.\nPagine fallite: $pages_failed",
                 undef,
@@ -270,7 +276,7 @@ if ($^O eq 'darwin' && !$terminate) {
             );
         } elsif ($pages_failed > 0) {
             # Parziale
-            send_macos_notification(
+            send_notification(
                 "Download completato con errori",
                 "Pagine scaricate: $pages_downloaded\nPagine fallite: $pages_failed",
                 $open_finder ? $output_dir : undef,
@@ -278,7 +284,7 @@ if ($^O eq 'darwin' && !$terminate) {
             );
         } else {
             # Successo
-            send_macos_notification(
+            send_notification(
                 "Download completato",
                 "Pagine scaricate: $pages_downloaded\nPagine fallite: $pages_failed",
                 $open_finder ? $output_dir : undef,
@@ -311,427 +317,6 @@ Esempi:
 
 EOF
     exit 0;
-}
-
-# Funzione per il thread worker
-sub worker_thread {
-    # Crea un LWP::UserAgent per thread (riutilizzabile)
-    my $ua = LWP::UserAgent->new;
-    $ua->ssl_opts(verify_hostname => 1);
-    $ua->timeout(DEFAULT_TIMEOUT);
-    $ua->agent($user_agent);
-    $ua->max_redirect(5);
-    
-    # Cache per directory già create (per thread)
-    my %dir_cache;
-    
-    while (!$terminate) {
-        # Usa dequeue_timed per evitare busy waiting
-        my $job = $queue->dequeue_timed(1);
-        if (!defined $job) {
-            # Timeout - thread inattivo
-            $threads_lock->down();
-            $active_threads--;
-            $threads_lock->up();
-            
-            # Aspetta un po' prima di riprovare
-            sleep 0.1;
-            
-            $threads_lock->down();
-            $active_threads++;
-            $threads_lock->up();
-            next;
-        }
-        
-        last if $job eq SENTINEL;
-        
-        $threads_lock->down();
-        $active_threads--;
-        $threads_lock->up();
-        
-        my ($url, $depth) = @$job;
-        download_page($url, $depth, $ua, \%dir_cache);
-        
-        $threads_lock->down();
-        $active_threads++;
-        $threads_lock->up();
-    }
-    
-    # Thread terminato
-    $threads_lock->down();
-    $active_threads--;
-    $threads_lock->up();
-}
-
-# Funzione per ottenere il titolo del sito
-sub get_site_title {
-    my ($url) = @_;
-    my $uri = URI->new($url);
-    my $host = $uri->host || 'unknown';
-    $host =~ s/^www\.//;
-    return $host;
-}
-
-# Funzione per effettuare il download di un URL con retry
-sub fetch_url {
-    my ($url, $ua) = @_;
-    my $response;
-    my $retries = 0;
-    
-    # Usa LWP::UserAgent passato come parametro (riutilizzabile)
-    $ua ||= do {
-        my $new_ua = LWP::UserAgent->new;
-        $new_ua->ssl_opts(verify_hostname => 1);
-        $new_ua->timeout(DEFAULT_TIMEOUT);
-        $new_ua->agent($user_agent);
-        $new_ua->max_redirect(5);
-        $new_ua;
-    };
-
-    while ($retries < $max_retries) {
-        eval {
-            $response = $ua->get($url);
-        };
-        
-        if ($@) {
-            $retries++;
-            warn "[!] Errore durante il download di $url: $@\n" if $verbose;
-            sleep 2 if $retries < $max_retries;
-            next;
-        }
-        
-        if ($response && $response->is_success) {
-            return $response;
-        } else {
-            $retries++;
-            if ($verbose) {
-                my $status = $response ? $response->status_line : 'Unknown error';
-                warn "[!] Errore scaricamento $url: $status - Tentativo $retries/$max_retries\n";
-            }
-            sleep 2 if $retries < $max_retries;
-        }
-    }
-
-    log_error("Impossibile scaricare $url dopo $max_retries tentativi.");
-    return undef;
-}
-
-# Funzione per determinare la codifica
-sub get_encoding {
-    my ($response) = @_;
-    
-    # Prova a ottenere la codifica dall'header Content-Type
-    my $content_type = $response->header('Content-Type');
-    if ($content_type && $content_type =~ /charset=([^\s;]+)/i) {
-        return $1;
-    }
-    
-    # Prova a parsare l'HTML per trovare la codifica
-    my $parser = HTML::HeadParser->new;
-    eval {
-        $parser->parse($response->content);
-        my $meta_content_type = $parser->header('Content-Type');
-        if ($meta_content_type && $meta_content_type =~ /charset=([^\s;]+)/i) {
-            return $1;
-        }
-    };
-    
-    # Default a UTF-8 se non trovato
-    return 'UTF-8';
-}
-
-# Funzione per scaricare e analizzare una pagina
-sub download_page {
-    my ($url, $depth, $ua, $dir_cache) = @_;
-    
-    return if $depth > $max_depth;
-    return if $terminate;
-    
-    # Controlla se già visitato (thread-safe)
-    $visited_lock->down();
-    if ($visited{$url}) {
-        $visited_lock->up();
-        return;
-    }
-    $visited{$url} = 1;
-    $visited_lock->up();
-    
-    print "[+] Scaricamento [$depth]: $url\n" if $verbose;
-    
-    # Recupera il contenuto della pagina
-    my $response = fetch_url($url, $ua);
-    unless ($response && $response->is_success) {
-        $pages_lock->down();
-        $pages_failed++;
-        $pages_lock->up();
-        return;
-    }
-    
-    # Determina il tipo di contenuto
-    my $content_type = $response->header('Content-Type') || '';
-    my $is_html = $content_type =~ /text\/html|application\/xhtml/i;
-    
-    # Salvataggio della pagina
-    my $path = uri_to_path($url, $is_html);
-    my $full_path = File::Spec->catfile($output_dir, $path);
-    
-    # Verifica che la directory di destinazione esista (con cache)
-    my $dir = dirname($full_path);
-    unless ($dir_cache->{$dir} || -d $dir) {
-        make_path($dir);
-        $dir_cache->{$dir} = 1;
-    }
-    
-    # Scrivi il contenuto del file
-    eval {
-        if ($is_html) {
-            my $encoding = get_encoding($response);
-            my $content = decode($encoding, $response->content);
-            open my $fh, '>:encoding(UTF-8)', $full_path;
-            print $fh $content;
-            close $fh;
-        } else {
-            # Per file binari, scrivi direttamente
-            open my $fh, '>', $full_path;
-            binmode $fh;
-            print $fh $response->content;
-            close $fh;
-        }
-    };
-    
-    if ($@) {
-        warn "[!] Errore durante il salvataggio di $url: $@\n" if $verbose;
-        log_error("Errore salvataggio $url: $@");
-        $pages_lock->down();
-        $pages_failed++;
-        $pages_lock->up();
-        return;
-    }
-    
-    $pages_lock->down();
-    $pages_downloaded++;
-    $pages_lock->up();
-    
-    # Analizza solo file HTML per trovare link
-    if ($is_html) {
-        my $content = $response->decoded_content;
-        my $base_uri = URI->new($url);
-        
-        my $parser = HTML::LinkExtor->new(sub {
-            my ($tag, %attr) = @_;
-            
-            # Lista di tag da controllare
-            return unless $tag =~ /^(a|img|link|script|iframe|video|audio|source|object|embed|meta|track|form)$/;
-            
-            # Estrazione link dai vari attributi
-            my $link = $attr{href} || $attr{src} || $attr{data} || 
-                       $attr{action} || $attr{poster} || 
-                       ($tag eq 'meta' ? $attr{content} : undef);
-            
-            return unless $link;
-            
-            # Gestione di meta-refresh
-            if ($tag eq 'meta' && $link =~ /URL=([^;]+)/i) {
-                $link = $1;
-            }
-            
-            # Converti in URL assoluto
-            my $abs_link;
-            eval {
-                $abs_link = URI->new_abs($link, $base_uri)->as_string;
-            };
-            return unless $abs_link;
-            
-            # Aggiungi alla coda solo link validi HTTP/HTTPS dello stesso dominio
-            if ($abs_link =~ /^https?:\/\//) {
-                my $link_uri = URI->new($abs_link);
-                # Segui solo link dello stesso dominio (opzionale: rimuovi per seguire tutti i link)
-                if ($link_uri->host && $link_uri->host eq $base_uri->host) {
-                    $visited_lock->down();
-                    unless ($visited{$abs_link}) {
-                        $queue->enqueue([$abs_link, $depth + 1]) unless $terminate;
-                    }
-                    $visited_lock->up();
-                }
-            }
-        });
-        
-        eval {
-            $parser->parse($content);
-        };
-        if ($@ && $verbose) {
-            warn "[!] Errore parsing HTML per $url: $@\n";
-        }
-    }
-}
-
-# Funzione per registrare gli errori nel file di log
-sub log_error {
-    my ($message) = @_;
-    my $timestamp = localtime->strftime('%Y-%m-%d %H:%M:%S');
-    eval {
-        open my $log_fh, '>>:encoding(UTF-8)', $log_file;
-        print $log_fh "[$timestamp] $message\n";
-        close $log_fh;
-    };
-    # Ignora errori di scrittura del log per non interrompere l'esecuzione
-}
-
-# Converte l'URL in un percorso di file
-sub uri_to_path {
-    my ($uri, $is_html) = @_;
-    
-    my $u = URI->new($uri);
-    my $path = $u->path || '/';
-    $path =~ s{^/}{};
-    $path =~ s{/$}{/index} if $path;
-    $path ||= 'index';
-    
-    # Rimuovi caratteri problematici
-    $path =~ s/[^\w\.\-\/]/_/g;
-    $path =~ s{/+}{/}g;
-    
-    # Aggiungi estensione se necessario
-    unless ($path =~ /\.[a-z]{2,4}$/i) {
-        $path .= $is_html ? '.html' : '';
-    }
-    
-    return $path;
-}
-
-# Funzione per sanificare il nome della directory
-sub sanitize_filename {
-    my ($filename) = @_;
-    $filename =~ s/[^a-zA-Z0-9._-]/_/g;
-    $filename =~ s/_+/_/g;
-    $filename =~ s/^_|_$//g;
-    return $filename || 'download';
-}
-
-# Funzione per inviare notifiche macOS
-sub send_macos_notification {
-    my ($title, $message, $output_path, $success) = @_;
-    $success = 1 unless defined $success;
-    
-    return unless $^O eq 'darwin';
-    return unless -x '/usr/bin/osascript';
-    
-    # Escape caratteri speciali per AppleScript (metodo robusto)
-    $title =~ s/\\/\\\\/g;
-    $title =~ s/"/\\"/g;
-    $title =~ s/\$/\\\$/g;
-    $title =~ s/`/\\`/g;
-    
-    $message =~ s/\\/\\\\/g;
-    $message =~ s/"/\\"/g;
-    $message =~ s/\$/\\\$/g;
-    $message =~ s/`/\\`/g;
-    $message =~ s/\n/\\n/g;
-    
-    my $sound = $success ? 'Glass' : 'Basso';
-    
-    # Usa AppleScript con escape corretto
-    my $script = qq{display notification "$message" with title "$title" subtitle "OffLiner" sound name "$sound"};
-    
-    eval {
-        open my $pipe, '|-', 'osascript', '-e', $script or return;
-        close $pipe;
-    };
-    
-    # Apri Finder nella directory di output (opzionale)
-    if ($output_path && -d $output_path && -x '/usr/bin/open') {
-        eval {
-            system('open', $output_path) == 0;
-        };
-    }
-}
-
-# Funzione per caricare configurazione
-sub load_config {
-    my %config = ();
-    
-    if (-f $config_file && -r $config_file) {
-        eval {
-            open my $fh, '<', $config_file or die "Cannot read config: $!";
-            local $/;
-            my $json = <$fh>;
-            close $fh;
-            my $data = decode_json($json);
-            %config = %$data;
-        };
-        if ($@ && $verbose) {
-            warn "[!] Errore lettura config: $@\n";
-        }
-    }
-    
-    return %config;
-}
-
-# Funzione per ottenere URL dalla clipboard (macOS)
-sub get_clipboard_url {
-    return undef unless $^O eq 'darwin';
-    return undef unless -x '/usr/bin/pbpaste';
-    
-    my $clipboard = `pbpaste 2>/dev/null`;
-    chomp $clipboard;
-    
-    # Cerca URL nel testo
-    if ($clipboard =~ /(https?:\/\/[^\s]+)/) {
-        return $1;
-    }
-    
-    # Se è già un URL valido
-    if ($clipboard =~ /^https?:\/\//) {
-        return $clipboard;
-    }
-    
-    return undef;
-}
-
-# Funzione per verificare aggiornamenti
-sub check_for_updates {
-    my $current_version = $VERSION;
-    
-    eval {
-        require LWP::UserAgent;
-        my $ua = LWP::UserAgent->new(timeout => 5);
-        $ua->agent("OffLiner/$VERSION");
-        
-        my $response = $ua->get('https://api.github.com/repos/gpicchiarelli/offliner/releases/latest');
-        
-        if ($response->is_success) {
-            my $content = $response->decoded_content;
-            if ($content =~ /"tag_name"\s*:\s*"v?([\d.]+)"/) {
-                my $latest_version = $1;
-                if (version_compare($latest_version, $current_version) > 0) {
-                    print "📦 Nuova versione disponibile: $latest_version (attuale: $current_version)\n";
-                    print "Scarica da: https://github.com/gpicchiarelli/offliner/releases/latest\n";
-                } else {
-                    print "✓ Sei aggiornato alla versione $current_version\n";
-                }
-            }
-        }
-    };
-    
-    if ($@) {
-        warn "Impossibile verificare aggiornamenti: $@\n" if $verbose;
-    }
-}
-
-# Funzione per confrontare versioni
-sub version_compare {
-    my ($v1, $v2) = @_;
-    my @v1_parts = split /\./, $v1;
-    my @v2_parts = split /\./, $v2;
-    
-    for my $i (0..$#v1_parts) {
-        my $p1 = $v1_parts[$i] || 0;
-        my $p2 = $v2_parts[$i] || 0;
-        return 1 if $p1 > $p2;
-        return -1 if $p1 < $p2;
-    }
-    
-    return 0;
 }
 
 __END__

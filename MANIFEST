@@ -25,5 +25,13 @@ t/09_error_handling.t
 t/10_cleanup_complete.t
 t/test_helper.pl
 t/README.md
+lib/OffLiner/Config.pm
+lib/OffLiner/Downloader.pm
+lib/OffLiner/Logger.pm
+lib/OffLiner/Parser.pm
+lib/OffLiner/Platform/macOS.pm
+lib/OffLiner/Utils.pm
+lib/OffLiner/Version.pm
+lib/OffLiner/Worker.pm
 
 
